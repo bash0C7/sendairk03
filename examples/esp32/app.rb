@@ -63,76 +63,78 @@ tilt_x = 0
 tilt_y = 0
 last_emit_ms = 0
 
-# gate が立ち上がった瞬間の姿勢を基準にする (演奏中の傾きだけを depth にする)
-calibrate = nil
-show_leds = nil
+# ---- run loop (gems/picoruby-instrument の Runner) ----
+# block はフラットに登録する。`run do |inst| inst.tick { ... } end` の入れ子は mruby/c では
+# 外側 block が返った後に内側 block が上のローカル変数 (gate / tof / led ...) を掴めず VM が落ちる。
+runner = Instrument::Runner.new(link: link)
 
-Instrument::Runner.new(link: link).run do |inst|
-  inst.setup do
-    tof.start_sampling(interval_ms: TOF_INTERVAL_MS)   # 背景 Task で測り続ける (mruby/c でも動く API)
-    imu.start_sampling(interval_ms: 20)
-    led.brightness = 40
-    led.clear
-    led.show
-    puts "# sendairk03 instrument ready (ToF #{TOF_INTERVAL_MS}ms, frame #{FRAME_MS}ms)"
-  end
-
-  inst.tick do |i|
-    now = Machine.board_millis
-
-    # gate: 押している間だけ。edge は即時に frame を送る (ToF の周期を待たない)
-    gate.update(button.read == 0)
-    if gate.edge == :rising
-      acc = imu.latest_acceleration || imu.acceleration
-      base_x = (acc[:x] * 1000).to_i
-      base_y = (acc[:y] * 1000).to_i
-      base_z = (acc[:z] * 1000).to_i
-    end
-
-    if tof.fresh?
-      dist = smoother.update(tof.latest_distance) || dist
-    end
-    note = pitch.note_milli(dist)
-
-    if gate.on?
-      acc = imu.latest_acceleration || imu.acceleration
-      tilt_x = (acc[:x] * 1000).to_i - base_x
-      tilt_y = (acc[:y] * 1000).to_i - base_y
-      depth = depth_of.depth(tilt_x, tilt_y, (acc[:z] * 1000).to_i - base_z)
-    end
-
-    if gate.changed? || (now - last_emit_ms) >= FRAME_MS
-      i.emit(gate: gate.on?, note_milli: note, depth: depth, dist: dist, tilt_x: tilt_x, tilt_y: tilt_y)
-      last_emit_ms = now
-
-      if pwm
-        if gate.on?
-          pwm.frequency(pitch.freq_milli(note) / 1000)
-          pwm.duty(50)
-        else
-          pwm.duty(0)
-        end
-      end
-
-      hue = (note - NOTE_MIN * 1000) * 300 / ((NOTE_MAX - NOTE_MIN) * 1000)   # 0..300 (赤→紫)
-      bright = gate.on? ? 100 : 25
-      k = 0
-      while k < LED_COUNT
-        led.set_hsb(k, hue, 90, bright)
-        k += 1
-      end
-      led.show
-    end
-
-    sleep_ms 1   # 背景 Task (ToF / IMU sampler) に実行権を渡す
-  end
-
-  inst.teardown do
-    pwm.duty(0) if pwm
-    led.clear
-    led.show
-    tof.stop_sampling
-    imu.stop_sampling
-    puts "# instrument stopped"
-  end
+runner.setup do
+  tof.start_sampling(interval_ms: TOF_INTERVAL_MS)   # 背景 Task で測り続ける (mruby/c でも動く API)
+  imu.start_sampling(interval_ms: 20)
+  led.brightness = 40
+  led.clear
+  led.show
+  puts "# sendairk03 instrument ready (ToF #{TOF_INTERVAL_MS}ms, frame #{FRAME_MS}ms)"
 end
+
+runner.tick do |i|
+  now = Machine.board_millis
+
+  # gate: 押している間だけ。edge は即時に frame を送る (ToF の周期を待たない)
+  gate.update(button.read == 0)
+  if gate.edge == :rising
+    # 立ち上がった瞬間の姿勢を基準にする (演奏中の傾きだけを depth にする)
+    acc = imu.latest_acceleration || imu.acceleration
+    base_x = (acc[:x] * 1000).to_i
+    base_y = (acc[:y] * 1000).to_i
+    base_z = (acc[:z] * 1000).to_i
+  end
+
+  if tof.fresh?
+    dist = smoother.update(tof.latest_distance) || dist
+  end
+  note = pitch.note_milli(dist)
+
+  if gate.on?
+    acc = imu.latest_acceleration || imu.acceleration
+    tilt_x = (acc[:x] * 1000).to_i - base_x
+    tilt_y = (acc[:y] * 1000).to_i - base_y
+    depth = depth_of.depth(tilt_x, tilt_y, (acc[:z] * 1000).to_i - base_z)
+  end
+
+  if gate.changed? || (now - last_emit_ms) >= FRAME_MS
+    i.emit(gate: gate.on?, note_milli: note, depth: depth, dist: dist, tilt_x: tilt_x, tilt_y: tilt_y)
+    last_emit_ms = now
+
+    if pwm
+      if gate.on?
+        pwm.frequency(pitch.freq_milli(note) / 1000)
+        pwm.duty(50)
+      else
+        pwm.duty(0)
+      end
+    end
+
+    hue = (note - NOTE_MIN * 1000) * 300 / ((NOTE_MAX - NOTE_MIN) * 1000)   # 0..300 (赤→紫)
+    bright = gate.on? ? 100 : 25
+    k = 0
+    while k < LED_COUNT
+      led.set_hsb(k, hue, 90, bright)
+      k += 1
+    end
+    led.show
+  end
+
+  sleep_ms 1   # 背景 Task (ToF / IMU sampler) に実行権を渡す
+end
+
+runner.teardown do
+  pwm.duty(0) if pwm
+  led.clear
+  led.show
+  tof.stop_sampling
+  imu.stop_sampling
+  puts "# instrument stopped"
+end
+
+runner.run

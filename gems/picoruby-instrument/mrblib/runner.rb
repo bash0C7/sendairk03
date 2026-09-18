@@ -1,11 +1,16 @@
 # 楽器の「器」。harness の USB::Peripheral と同じ形: setup / tick / teardown をブロックで受け、
 # ループと後始末をここが持つ。アプリはセンサーを読んで emit するだけ。
 #
-#   Instrument::Runner.new(link: link).run do |inst|
-#     inst.setup    { |i| ... センサー初期化 ... }
-#     inst.tick     { |i| i.emit(gate: g, note_milli: n, depth: d, dist: mm) }
-#     inst.teardown { |i| ... LED 消灯など ... }
-#   end
+#   runner = Instrument::Runner.new(link: link)
+#   runner.setup    { |i| ... センサー初期化 ... }
+#   runner.tick     { |i| i.emit(gate: g, note_milli: n, depth: d, dist: mm) }
+#   runner.teardown { |i| ... LED 消灯など ... }
+#   runner.run
+#
+# block はこのようにフラットに登録する。`run do |inst| inst.tick { ... } end` の入れ子も mruby では動くが、
+# mruby/c (FemtoRuby = ATOM Matrix) では、外側の block が返った後に呼ばれる内側の block が外側の
+# ローカル変数を掴んでいると VM が assertion で落ちる (escaped closure)。センサーや LED の変数は
+# 登録した場所と同じスコープに置く。
 #
 # Runner が保証すること (= アプリに書かせないこと):
 #   - seq の付番と frame 送出の一元化 (link.write)

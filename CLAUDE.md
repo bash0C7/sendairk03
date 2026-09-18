@@ -54,8 +54,13 @@ vendor が無い session では最初に `rake vendor:setup_all` を回す (impo
 - `HARNESS_GEMS` (Rakefile) は host で compile できる pure Ruby の gem だけ。target 専用は `TARGET_ONLY_GEMS` で、
   build_config 側にだけ書く。間違えると `rake test:host` の host VM build ごと壊れる
 - ATOM で動く gem は mruby/c の subset で書く: `defined?` / `Hash#fetch` / inline rescue / `proc` / `lambda` /
-  `String#unpack` を使わない。Float に頼らず整数演算。library code は while ループ (vendor/picoruby/AGENTS.md)。
-  `rake test:host_femto` が担保する
+  `String#unpack` / `Class.new` / `Array#concat` / `**opts` (keyword splat と zsuper の組み合わせ) を使わない。
+  gem 内の依存は明示的に `require` する (mruby/c は require されるまで他 gem の mrblib が見えない)。
+  Float に頼らず整数演算。library code は while ループ (vendor/picoruby/AGENTS.md)。`rake test:host_femto` が担保する
+- **mruby/c の escaped closure**: 外側の block が返った後に呼ばれる内側の block が外側のローカル変数を掴んでいると
+  VM が `mrbc_find_class_by_object: Invalid value type` で落ちる。callback の登録 (`runner.tick { }` /
+  `button.irq { }`) は変数と同じスコープでフラットに書き、`run do |inst| inst.tick { ... } end` の入れ子にしない。
+  状態を渡すなら ivar か `capture:` 引数 (picoruby-irq の流儀)
 - picotest の fake は method の中で `Class.new` する。runner は test file を CRuby で先に load して class を数えるので、
   top level で VM 専用の定数に触ると NameError で落ちる
 - `spec.require_name` を必ず書く (harness の `test.rake` が mrbgem.rake から読む)

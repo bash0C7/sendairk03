@@ -97,7 +97,17 @@ vendor/                          生成物。commit しない
 | 4 | iPhone / Watch (Watch 音声 spike を最初に) | 実機で音 |
 | 5 | async_port (core1 sampling) / AOT。数字が改善しなければ revert | latency.md |
 
-## 7. 未決
+## 7. mruby/c (FemtoRuby = ATOM Matrix) の制約 (test:host_femto で踏んだもの)
+
+- `Class.new` 無し → picotest の fake は top level で `begin; <gem の定数>; class Fake < ...; rescue NameError; end` で定義する
+  (CRuby の下読みでは NameError で飛ばされ、target VM では定義される)
+- `**opts` を受ける method に zsuper (引数無しの `super`) を組み合わせると "wrong number of arguments" → opts は Hash の位置引数
+- 他 gem の mrblib は `require` されるまで見えない → gem 内の依存は明示的に require する
+- `Array#concat` 無し
+- **escaped closure**: 外側 block が返った後に呼ばれる内側 block が外側のローカル変数を掴むと VM assertion で落ちる
+  (`r.run { |inst| inst.tick { log << :x } }` の形)。callback はフラットに登録し、`run` はその同じスコープから呼ぶ
+
+## 8. 未決
 
 - ATOM Matrix で PicoRuby (mruby) VM が boot するか (0b)。boot すれば DRb を ATOM でも狙う
 - `MRC_PRISM_ARENA_BLOCK` の override が vendor の mruby-compiler で効くか (効かなければ `PIN_COMPILER=1`)
