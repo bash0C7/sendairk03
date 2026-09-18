@@ -23,6 +23,7 @@ namespace :test do
   task :host_femto do
     require_vendor!
     require_harness!
+    FileUtils.mkdir_p File.join(BUILD_DIR, "test-femto")
     build_femto_host_vm unless ENV["SKIP_BUILD"]
     require picotest_path
     ENV["RUBY"] = femto_vm_path
