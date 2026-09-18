@@ -1,4 +1,9 @@
-require "instrument/link"
+# link gem の Loopback を fake に使う。picotest の runner は test file を CRuby でも load するので、
+# CRuby 側で見つからない require は無視する (target VM では runner の Kernel#require が同じことをする)
+begin
+  require "instrument/link"
+rescue LoadError
+end
 # Instrument::Runner のライフサイクル。link は gem 内の Loopback、idle は待たない subclass で差し替える。
 #
 # fake の作り方: mruby/c には Class.new が無く、Ruby は method の中に class を書けない。
