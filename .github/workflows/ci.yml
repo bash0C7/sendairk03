@@ -1,0 +1,31 @@
+# ホスト層のテスト (Phase 0 の範囲)。実機は回せないので、ここが green でも完了ではない。
+# picoruby と submodule の取得 + host build (mruby と mruby/c の 2 回) で数分と数百 MB。
+# ESP-IDF / Xcode / Emscripten は CI に載せない (載せると誰も直さない赤が残る)。
+name: test
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  LANG: C.UTF-8
+  LC_ALL: C.UTF-8
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Fetch the harness and picoruby (ESP32 / darwin trees are not needed on the host)
+        run: SKIP_ESP32=1 SKIP_DARWIN=1 bin/rake vendor:setup_all
+
+      - name: picotest on both host VMs and compile every example / web / server source
+        run: bin/rake test

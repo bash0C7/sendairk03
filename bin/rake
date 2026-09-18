@@ -1,0 +1,5 @@
+#!/usr/bin/env ruby
+# rake の exe が PATH に無い環境 (Claude Code の web session、rbenv shim 無しの CI) 用の入口。
+# `bin/rake test` のように使う。中身は rubygems が知っている rake をそのまま load するだけ。
+ENV["LC_ALL"] ||= "C.UTF-8"
+load Gem.bin_path("rake", "rake")

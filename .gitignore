@@ -54,3 +54,13 @@ build-iPhoneSimulator/
 
 # Used by RuboCop. Remote config files pulled in from inherit_from directive.
 # .rubocop-https?--*
+
+## sendairk03: vendor trees and build outputs are generated, never committed
+/vendor/
+/build/
+/tools/
+/firmware-patches/harness-*.patch
+/web/public/vendor/
+*.mrb
+*.pid
+*.log
