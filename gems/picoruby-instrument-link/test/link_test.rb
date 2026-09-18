@@ -1,5 +1,12 @@
 # Instrument::Link: spec の parse と、host で動く transport (Loopback / Console)。
 # UART / BLE / Web / Serial の class は host の build に居ないので、ここでは「無いなら open が落ちる」だけを見る。
+# frame gem は link gem の optional な相手。mruby/c では require されるまで見えないので test 側で読む
+# (CRuby の下読みでは見つからないので LoadError を無視する)
+begin
+  require "instrument/frame"
+rescue LoadError
+end
+
 class InstrumentLinkTest < Picotest::Test
   def test_parse_scheme_host_and_params
     p = Instrument::Link.parse("uart://1?baud=921600&tx=32&rx=33")
