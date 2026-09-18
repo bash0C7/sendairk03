@@ -47,19 +47,21 @@ module Instrument
       SCHEMES[scheme] = klass
     end
 
-    def self.open(spec, **opts)
+    # opts は Hash の位置引数 (mruby/c では **opts と zsuper の組み合わせが落ちるので keyword splat を使わない)
+    def self.open(spec, opts = {})
       parsed = parse(spec)
       klass = SCHEMES[parsed[:scheme]]
       raise Error, "no transport for #{parsed[:scheme]}:// in this build (have: #{SCHEMES.keys.sort.join(', ')})" unless klass
-      klass.new(parsed[:host], parsed[:params], **opts)
+      klass.new(parsed[:host], parsed[:params], opts)
     end
 
     # 全 transport の共通 interface。IO 風 (write / read_nonblock / available) にしておくと
     # Frame::Reader と DRb の transport がそのまま乗る。
     class Base
-      def initialize(host = "", params = {}, **_opts)
+      def initialize(host = "", params = {}, opts = {})
         @host = host
         @params = params
+        @opts = opts
       end
 
       def write(_data)
@@ -116,8 +118,8 @@ module Instrument
     class Loopback < Base
       attr_reader :written
 
-      def initialize(host = "", params = {}, **opts)
-        super
+      def initialize(host = "", params = {}, opts = {})
+        super(host, params, opts)
         @written = []
         @rx = ""
       end

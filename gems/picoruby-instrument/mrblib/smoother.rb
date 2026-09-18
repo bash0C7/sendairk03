@@ -5,6 +5,8 @@
 #   s.in_range?       # => 直前の raw が [min, max] に入っていたか
 #
 # alpha は 0..100 (%)。100 なら EMA なし。picoruby-ot の実測では 50 が追従とノイズの折り合い。
+require "median_filter"
+
 module Instrument
   class Smoother
     attr_reader :value, :alpha, :min, :max

@@ -15,7 +15,7 @@ class InstrumentFrameReaderTest < Picotest::Test
     got = []
     i = 0
     while i < str.length
-      got.concat(reader.feed(str[i, 1]))
+      got = got + reader.feed(str[i, 1])
       i += 1
     end
     assert_equal 1, got.size

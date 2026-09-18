@@ -9,8 +9,8 @@ module Instrument
       class WebBle < Base
         attr_reader :uart
 
-        def initialize(host = "", params = {}, **opts)
-          super
+        def initialize(host = "", params = {}, opts = {})
+          super(host, params, opts)
           @name = host.length == 0 ? "SendaiRK03" : host
           @uart = opts[:uart]
         end
@@ -52,8 +52,8 @@ module Instrument
       class WebSerial < Base
         attr_reader :port
 
-        def initialize(host = "", params = {}, **opts)
-          super
+        def initialize(host = "", params = {}, opts = {})
+          super(host, params, opts)
           @baud = param_int("baud", 115_200)
           @port = opts[:port]
           @rx = ""

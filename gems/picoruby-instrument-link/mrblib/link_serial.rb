@@ -6,8 +6,8 @@ module Instrument
       class Serial < Base
         attr_reader :port
 
-        def initialize(host = "", params = {}, **opts)
-          super
+        def initialize(host = "", params = {}, opts = {})
+          super(host, params, opts)
           path = host.length == 0 ? "" : "/#{host}"
           path = host if host.start_with?("/")
           @port = opts[:port] || SerialPort.open(path, baudrate: param_int("baud", 115_200))

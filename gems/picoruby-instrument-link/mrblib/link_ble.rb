@@ -9,8 +9,8 @@ module Instrument
       class BleUart < Base
         attr_reader :uart
 
-        def initialize(host = "", params = {}, **opts)
-          super
+        def initialize(host = "", params = {}, opts = {})
+          super(host, params, opts)
           name = host.length == 0 ? "SendaiRK03" : host
           @uart = opts[:uart] || BLE::UART.new(role: :peripheral, name: name)
         end

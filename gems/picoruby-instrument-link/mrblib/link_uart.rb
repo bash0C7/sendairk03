@@ -4,8 +4,8 @@ module Instrument
     begin
       UART
       class Uart < Base
-        def initialize(host = "", params = {}, **opts)
-          super
+        def initialize(host = "", params = {}, opts = {})
+          super(host, params, opts)
           unit = host.length == 0 ? "UART1" : (host =~ /\A\d+\z/ ? "UART#{host}" : host)
           @uart = UART.new(
             unit: unit,

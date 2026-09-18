@@ -12,6 +12,8 @@
 #   - tick が raise しても、stop されても、必ず gate:0 の frame を 1 回送ってから teardown を呼ぶ (stuck note を残さない)
 #   - before_tick / after_tick のフック (IRQ.process を挟む場所)
 #   - idle(ms) は差し替え可能な seam (テストでは待たない)
+require "instrument/frame"
+
 module Instrument
   class Runner
     class Error < StandardError; end
