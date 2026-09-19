@@ -115,6 +115,11 @@ rp2040 は `RP2040_UART0`..`RP2040_UART1`。数値の shorthand は無い)。
 - `Array#concat` 無し
 - **escaped closure**: 外側 block が返った後に呼ばれる内側 block が外側のローカル変数を掴むと VM assertion で落ちる
   (`r.run { |inst| inst.tick { log << :x } }` の形)。callback はフラットに登録し、`run` はその同じスコープから呼ぶ
+- **稀な flake**: `test:host_femto` の `InstrumentRunnerTest#test_run_requires_a_tick_block` で、`raise` が
+  picotest の `assert_raise` (`rescue Exception`) を素通りして exception 扱いになることがある。同じ生成 script を
+  直接 200 回以上回して 2 回だけ (CPU 負荷とは無関係、順序を変えても再現せず)。mruby/c VM 側の非決定性で、
+  test を変えても消えない。落ちたら `SKIP_BUILD=1 bin/rake test:host_femto` を 1 回だけ再実行して判断する。
+  再現手順: `RUBY=vendor/picoruby/build-femto/host/bin/femtoruby $RUBY build/test-femto/InstrumentRunnerTest.rb` を繰り返す
 
 ## 8. 未決
 
