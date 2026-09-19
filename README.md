@@ -12,17 +12,21 @@ three.js の VJ ビジュアライザーと web スライド、Mac ローカル�
 
 ## 使う
 
+必要なもの: ruby 3.3+ / git / C toolchain (cc, make)。初回の `vendor:setup_all` は数百 MB。
+ESP32 は ESP-IDF v5.5 を `~/esp/esp-idf` に (別の場所なら `IDF_PATH=`)。wasm は `emcc` と `brotli`。
+`wasm:*` / `darwin:*` は task 自体はあるが、それぞれの toolchain (emscripten / Xcode) が無いと動かない。
+
 ```sh
-bin/rake vendor:setup_all   # vendor/ に harness / picoruby / R2P2-ESP32 / R2P2-darwin を取る
-bin/rake test                                   # host の picotest (mruby と mruby/c) + example / web / server の compile
-bin/rake -T                                       # 何ができるか
+bin/rake vendor:setup_all  # vendor/ に harness / picoruby / R2P2-ESP32 / R2P2-darwin を取る
+bin/rake test              # host の picotest (mruby と mruby/c) + example / web / server の compile
+bin/rake -T                # 何ができるか
 ```
 
 ATOM Matrix (ESP-IDF v5.5 と USB 接続):
 
 ```sh
-bin/rake esp32:setup                            # 一度だけ
-bin/rake esp32:run[30] APP=app                # sync → build → flash → 30 秒 monitor
+bin/rake esp32:setup              # 一度だけ
+bin/rake 'esp32:run[30]' APP=app  # sync → build → flash → 30 秒 monitor
 ```
 
 ## 中身
@@ -31,7 +35,7 @@ bin/rake esp32:run[30] APP=app                # sync → build → flash → 30 
 |---|---|
 | `gems/picoruby-instrument-frame` | wire protocol (ASCII v1 / binary v2) と streaming reader。pure Ruby |
 | `gems/picoruby-instrument` | 楽器の器: gate / smoother / 距離→音程 / 傾き→depth / run loop。pure Ruby |
-| `gems/picoruby-instrument-link` | console / UART / BLE / Web Serial / Web Bluetooth / serial port を同じ interface に |
+| `gems/picoruby-instrument-link` | console / UART / BLE / Web Serial / Web Bluetooth / serial port を同じ interface に揃える層 |
 | `examples/esp32/` | ATOM Matrix のアプリ (`app.rb` が起動時に走る) |
 | `examples/rp2040/` | Pico 2 W: BLE と DRb の展示 (Phase 3) |
 | `examples/darwin/` | iPhone / Apple Watch / macOS (Phase 4) |

@@ -5,7 +5,7 @@
 
 ## 1. 何を作るのか
 
-Sendai RubyKaigi 03 の 15 分発表「How to craft YOUR handmade PicoRuby Instrument」のための、
+Sendai RubyKaigi 03 の 15 分発表「How to craft YOUR handmade PicoRuby Instrument」のための、次の 5 つ。
 
 1. **楽器**: M5 ATOM Matrix (ESP32-PICO-D4、FemtoRuby) + VL53L0X ToF + MPU6886 IMU + ボタン gate + WS2812
 2. **音の出口**: Mac の Chrome (picoruby-wasm + funicular、WebAudio、3.5mm) と iPhone / Apple Watch (AVAudioEngine)
@@ -22,7 +22,7 @@ Sendai RubyKaigi 03 の 15 分発表「How to craft YOUR handmade PicoRuby Instr
 | 項目 | 決定 | 根拠 |
 |---|---|---|
 | 主役 MCU | ATOM Matrix、**FemtoRuby (mruby/c)** | R2P2-ESP32 の Supported Devices で ATOM は mruby/c のみ確認済 |
-| DRb / Task / ISR 直結 | **Pico 2 W** で展示 | picoruby-drb は mruby VM 限定。picoruby-ble の rp2040 port は上流にある |
+| DRb / Task / ISR 直結 | **Pico 2 W** で展示 | picoruby-drb は mruby VM 限定。mruby/c の `Task` (`Task.create`/`run`/`pass`) はあるが `Task::Queue` と `IRQ.start` (ISR 直結) が無い。picoruby-ble の rp2040 port は上流にある |
 | gate | ボタン (GPIO39) = 発音。`Instrument::Gate` (momentary / toggle / latch) | picoruby-ot の always-on drone の教訓 |
 | 音程 | **デバイス側で決める**。frame は MIDI note x1000 を運ぶ | 発表 section 2 の主張。ホストは波を作るだけ |
 | 音程の mode | continuous (portamento) と snap (音階吸着) を切替可能 | picoruby-ot で scale snap が未実装のまま event に臨んだ |
@@ -36,13 +36,15 @@ Sendai RubyKaigi 03 の 15 分発表「How to craft YOUR handmade PicoRuby Instr
 | LED | 外付け WS2812 16 連 (GPIO32)、`ksbmyk/picoruby-ws2812` | picoruby-ot と同配線 |
 | vendor | 4 tree を `vendor/` に。編集は patch / overlay shim / 生成 rake のみ | harness の規律 |
 | picoruby の pin | host/wasm = master 最新。ESP32 = 上流 submodule の pin。darwin = fork `port-darwin` | ESP32 の CMake は submodule の tree と結合 |
-| compiler の pin | 当てない (`SUBMODULE_PINS = {}`)。rp2040 は `MRC_PRISM_ARENA_BLOCK=4096` を define | 同じ tree を wasm が使う |
+| compiler の pin | 当てない (`SUBMODULE_PINS = {}`)。upstream の pico2_w config が `MRC_PRISM_ARENA_BLOCK=2048` を define 済で、override は mruby-compiler/src/ccontext.c の `#ifndef` で効く | 同じ tree を host test と wasm が使う |
+| driver gem の pin | github: を SHA (checksum_hash) で固定。更新は SHA を書き換える | build 時に main を解決させない・offline で build できる |
 | 完了の線引き | 実機で鳴る + Chrome で聞こえる。host の test は必要条件 | harness §5 と同じ |
 | CI | host 層のみ (両 VM の picotest + compile)。ESP-IDF / Xcode / emscripten は載せない | 誰も直さない赤を作らない |
 
 ## 3. 置き場所
 
 ```
+bin/rake                         rake の入口 (PATH に rake exe が無い環境向け)
 gems/picoruby-instrument-frame   wire protocol。pure Ruby、全 target
 gems/picoruby-instrument         器: Runner / Gate / Smoother / PitchMapper / DepthMapper。pure Ruby、全 target
 gems/picoruby-instrument-link    console / uart / ble / webserial / webble / serial の同型 interface
@@ -59,19 +61,26 @@ rakelib/                         vendor / test / esp32 / rp2040 / darwin / wasm
 patches/{esp32,picoruby-esp32}/  R2P2-ESP32 とその picoruby submodule に build 中だけ当てる patch
 firmware-patches/                rp2040 用。harness の patch は `rake vendor:sync_tools` が harness-*.patch として複製 (gitignore)
 tools/                           harness の tools/ の複製 (gitignore)
+.github/workflows/ci.yml         CI (host 層のみ)
+.claude/agents/                  subagent の定義 (coder / log-reader / spec-reader / executor)
 vendor/                          生成物。commit しない
 ```
 
 `HARNESS_GEMS` (Rakefile) は host で compile できる gem だけ。target 専用は `TARGET_ONLY_GEMS` で build_config 側にだけ書く。
+`uart://` link spec は完全な unit 名が必要 (`uart://ESP32_UART1?baud=921600&tx=32&rx=33`。esp32 は `ESP32_UART0`..`ESP32_UART2`、
+rp2040 は `RP2040_UART0`..`RP2040_UART1`。数値の shorthand は無い)。
 
 ## 4. rake の共通インタフェース
 
 | task | 意味 |
 |---|---|
-| `rake vendor:setup_all` / `vendor:refresh_all` | 4 tree の取得 / 更新。harness の `setup` / `refresh` を内包 |
+| `rake vendor:setup_all` / `vendor:refresh_all` | 4 tree の取得 / 更新。harness の `setup` / `refresh` を内包 (`vendor:refresh_rest` は内部 task) |
+| `rake clean` / `setup` / `refresh` | harness 由来の top-level task。`vendor:*` が内部で呼ぶ |
 | `rake test` | `test:host` (mruby) + `test:examples` + `test:sources` + `test:host_femto` (mruby/c)。board 無しはここまで |
+| `rake test:gem_lists` | gems/* が HARNESS_GEMS か TARGET_ONLY_GEMS のどちらかに居ることを検査 (`rake test` に含まれる) |
 | `rake esp32:setup` / `sync` / `build` / `flash` / `storage` / `monitor` / `run[secs]` / `stamp` / `qemu` | ATOM Matrix |
 | `rake rp2040:*` | harness の rp2040.rake をそのまま (tools / patches の複製が揃っている時だけ load) |
+| `rake rp2040:check_inputs` | tools/ と firmware-patches/harness-*.patch が揃っているか (rp2040:* の前提) |
 | `rake darwin:setup` / `sync` / `run[task]` | R2P2-darwin へ委譲 |
 | `rake wasm:build` / `dist` | picoruby-wasm を本 repo の gem 入りで build し web/public/vendor/ へ |
 
@@ -110,7 +119,7 @@ vendor/                          生成物。commit しない
 ## 8. 未決
 
 - ATOM Matrix で PicoRuby (mruby) VM が boot するか (0b)。boot すれば DRb を ATOM でも狙う
-- `MRC_PRISM_ARENA_BLOCK` の override が vendor の mruby-compiler で効くか (効かなければ `PIN_COMPILER=1`)
+- upstream の `MRC_PRISM_ARENA_BLOCK=2048` で Pico 2 W が実際に boot するか (compile 時の override は効くことを確認済)。boot しなければ harness と同じ compiler の pin を検討
 - `JS::WebSerial.connect` が async listener からの transient activation を満たすか (Phase 1 最初の検証)
 - Watch の AVAudioSourceNode 常時再生 (Phase 4 spike)
 - ESP32 の BLE: 上流未 merge (picoruby#427 / R2P2-ESP32#135)。ATOM は FemtoRuby なので frame push のみ、Phase 3 の後の stretch

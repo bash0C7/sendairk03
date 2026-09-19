@@ -5,11 +5,14 @@
 | 機能 | GPIO | 備考 |
 |---|---|---|
 | ボタン (gate) | 39 | 内蔵、`GPIO::IN \| GPIO::PULL_UP`。押下 = 0 |
-| I2C SDA | 25 | Grove (J3) 白 |
-| I2C SCL | 21 | Grove (J3) 黄 |
-| WS2812 16 連 | 32 | `ksbmyk/picoruby-ws2812` (RMT)。5V / GND |
+| I2C SDA | 25 | 側面ヘッダー (内蔵 IMU と同じ I2C bus) |
+| I2C SCL | 21 | 側面ヘッダー (内蔵 IMU と同じ I2C bus) |
+| 内蔵 5x5 WS2812 | 27 | 使わない (16 連を外付けする) |
+| WS2812 16 連 (外付け) | 32 | Grove ポート (G32)。`ksbmyk/picoruby-ws2812` (RMT)。5V / GND |
 | PWM スピーカー | 33 | 副の音出し。圧電 or 小型スピーカー + 抵抗 |
 | USB-UART console | — | 115200 baud。frame はここに流れる |
+
+※ ピン割当は bench で確認する (Phase 1)
 
 センサー (どちらも I2C、pure Ruby driver):
 
