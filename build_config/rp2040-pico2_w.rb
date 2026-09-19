@@ -11,17 +11,14 @@ load "#{MRUBY_ROOT}/build_config/r2p2-picoruby-pico2_w.upstream.rb"
 MRuby.each_target do |conf|
   next unless conf.name.start_with?("r2p2-picoruby-pico2_w")
 
-  # harness docs/spec.md §6: mruby-compiler の Prism arena (既定 64KB) が heap 396KB の Pico 2 W を
-  # 起動時に止める。harness は compiler の submodule を旧 pin に固定して逃げているが、本 repo は
-  # 同じ vendor/picoruby を wasm/host と共有するので pin を当てず、arena を小さくする。
-  # (R2P2-ESP32 が同じ define を 2048 で使っている。効かない場合は PIN_COMPILER=1 で rake setup)
-  conf.cc.defines << "MRC_PRISM_ARENA_BLOCK=4096"
+  # Prism arena は upstream の config が MRC_PRISM_ARENA_BLOCK=2048 を define 済 (compiler の pin は不要)
 
   # picoruby-ble / ble-uart / drb は upstream の pico2_w config (networking gembox 含む) に既に入っている
   conf.gem core: "picoruby-median_filter"
   conf.gem core: "picoruby-iir_filter"
-  conf.gem github: "bash0C7/picoruby-mpu6886", branch: "main"
-  conf.gem github: "bash0C7/picoruby-vl53l0x", branch: "main"
+  # SHA で固定する (build 時に main を解決させない。更新は SHA を書き換える)
+  conf.gem github: "bash0C7/picoruby-mpu6886", checksum_hash: "dd87ad2bb5a41c0f14cd2b69adb5b1ed26590e47"
+  conf.gem github: "bash0C7/picoruby-vl53l0x", checksum_hash: "7eb786b02837e9548033348e02de57e92dc0fc86"
 
   conf.gem gemdir: "#{SENDAI_ROOT}/gems/picoruby-instrument-frame"
   conf.gem gemdir: "#{SENDAI_ROOT}/gems/picoruby-instrument"

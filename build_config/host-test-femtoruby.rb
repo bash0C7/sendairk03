@@ -1,6 +1,5 @@
 # ホスト (mruby/c VM = FemtoRuby) でテストを回すための build_config。
 # ATOM Matrix は FemtoRuby なので、gem が mruby/c の subset に収まっていることをここで担保する。
-# upstream の build_config/femtoruby-test.rb をそのまま読み込み、本 repo の gem を足すだけ。
 
 SENDAI_ROOT = File.expand_path("..", __dir__)
 

@@ -22,9 +22,10 @@ def darwin_ready?
   File.directory?(File.join(DARWIN_DIR, ".git"))
 end
 
-# ESP32 の picoruby submodule は upstream の pin に従う。host build と同じ submodule だけ取る
-# (pico-sdk は ESP32 に要らない)。ESP32_PICORUBY_REF を指定した時だけ pin から動かす
-# (BLE の PR branch を当てるときに使う)。
+# ESP32 の picoruby submodule は upstream の pin に従う。mbedtls は pico-sdk の中にいる
+# (picoruby-mbedtls/lib/mbedtls -> pico-sdk/lib/mbedtls) ので、host build と同じ submodule に
+# 加えて pico-sdk とその mbedtls も浅く取る。さもないと idf.py build の途中で非 shallow clone が走る。
+# ESP32_PICORUBY_REF を指定した時だけ pin から動かす (BLE の PR branch を当てるときに使う)。
 def esp32_init_submodules
   FileUtils.cd(ESP32_DIR) do
     sh "git submodule update --init --depth 1 components/picoruby-esp32/picoruby"
@@ -38,7 +39,10 @@ def esp32_init_submodules
   end
   FileUtils.cd(ESP32_PICORUBY) do
     sh "git submodule update --init --depth 1 #{HOST_SUBMODULES.map(&:shellescape).join(' ')}"
+    sh "git submodule update --init --depth 1 mrbgems/picoruby-r2p2/lib/pico-sdk"
   end
+  sh "git -C #{File.join(ESP32_PICORUBY, 'mrbgems/picoruby-r2p2/lib/pico-sdk').shellescape} " \
+     "submodule update --init --depth 1 lib/mbedtls"
 end
 
 namespace :vendor do
@@ -73,7 +77,7 @@ namespace :vendor do
   end
 
   # harness の rp2040.rake は tools/pico2w/*.rb と firmware-patches/*.patch を HARNESS_ROOT 直下に
-  # 期待する (rp2040.rake:84,109,135,197,211 / 224,289)。vendor 側にしか実体が無いので複製する。
+  # 期待する。vendor 側にしか実体が無いので複製する。
   # patch は Dir[] が空だと黙って未適用になる (= Machine.usb_boot 無し firmware) ので、
   # 複製が無いときは rakelib/rp2040.rake が rp2040:* を load せずに落とす。
   desc "Copy the harness's tools/ and firmware-patches/*.patch into this repo (both gitignored)"
@@ -100,11 +104,17 @@ namespace :vendor do
     Rake::Task["vendor:darwin"].invoke unless ENV["SKIP_DARWIN"]
   end
 
+  # HARNESS_DIR を取り直した直後にこの process の中で load_harness_rakelib! しても、
+  # 二重 load を防ぐ guard がもう新しい harness を読ませてくれない。子 rake process に任せる。
   desc "Re-fetch every vendor tree at its ref and re-apply overlays"
   task :refresh_all do
     require_harness!
     git_refresh_shallow(HARNESS_DIR, HARNESS_REF)
-    load_harness_rakelib!
+    rake_in(HARNESS_ROOT, {}, "vendor:refresh_rest")
+  end
+
+  desc "Re-fetch picoruby / ESP32 / darwin trees (refresh_all invokes this in a fresh rake process)"
+  task :refresh_rest do
     Rake::Task["refresh"].invoke        # harness: vendor/picoruby
     Rake::Task["vendor:sync_tools"].invoke
     if esp32_ready?
@@ -116,6 +126,9 @@ namespace :vendor do
       esp32_init_submodules
       Rake::Task["esp32:overlay"].invoke
     end
-    git_refresh_shallow(DARWIN_DIR, DARWIN_REF) if darwin_ready?
+    if darwin_ready?
+      git_refresh_shallow(DARWIN_DIR, DARWIN_REF)
+      Rake::Task["darwin:setup"].invoke if File.directory?(File.join(DARWIN_PICORUBY, ".git"))
+    end
   end
 end

@@ -1,5 +1,4 @@
 # ホスト (mruby VM = PicoRuby) でテストを回すための build_config。
-# upstream の build_config/picoruby-test.rb をそのまま読み込み、本 repo の gem を gemdir: で足すだけ。
 #
 #   MRUBY_CONFIG=<repo>/build_config/host-test.rb rake all   # vendor/picoruby の中で
 #
@@ -8,7 +7,7 @@
 
 SENDAI_ROOT = File.expand_path("..", __dir__)
 
-load "#{MRUBY_ROOT}/build_config/picoruby-test.rb"
+load "#{MRUBY_ROOT}/build_config/picoruby-test.rb"  # そのまま読み込み、本 repo の gem を gemdir: で足すだけ
 
 MRuby.each_target do |conf|
   conf.gem core: "picoruby-median_filter"

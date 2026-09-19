@@ -1,13 +1,10 @@
-# sendairk03 の Rakefile。定数と helper だけを持ち、task は rakelib/ に置く。
+# sendairk03 の Rakefile。定数と helper、そして aggregate task (test / default) だけ。個別の task は rakelib/。
 #
 # 開発 harness (bash0C7/R2P2-dev-harness) は vendor/R2P2-dev-harness に clone して
 # そのまま使う。harness の rakelib は HARNESS_ROOT を基準に gems/ build_config/
 # examples/ build/ を見るので、ここで HARNESS_ROOT を本 repo の root にしてから
 # harness の rakelib を load する。harness の Rakefile 自体は load しない
 # (定数の二重定義と default task の持ち込みを避ける)。
-#
-# 変更経路は 3 つだけ: patches/ と firmware-patches/ の patch (build 中だけ当てて戻す)、
-# build_config の overlay shim、vendor/*/rakelib/ へ生成する .rake。vendor は編集しない。
 require "fileutils"
 require "digest"
 require "shellwords"
@@ -67,19 +64,14 @@ HOST_SUBMODULES = %w[
   mrbgems/picoruby-machine/lib/estalloc
   mrbgems/picoruby-regexp_light/lib/regex_light
   mrbgems/picoruby-littlefs/lib/littlefs
+  mrbgems/picoruby-funicular
 ].freeze
 
-# 空にしてある。harness の pin は Pico 2 W の heap 396KB 対策 (harness docs/spec.md §6) だが、
-# 同じ vendor/picoruby を host test と wasm が使うので、pin を当てると wasm まで古い compiler で
-# 焼かれる。R2P2-ESP32 が build_config で MRC_PRISM_ARENA_BLOCK=2048 を define しているので
-# 上流で override 可能になっている前提で、rp2040 は build_config/rp2040-pico2_w.rb が
-# MRC_PRISM_ARENA_BLOCK=4096 を define する。override が効かないと分かったら
-# PIN_COMPILER=1 で harness と同じ pin を有効にする (rakelib/vendor.rake)。
-SUBMODULE_PINS = (ENV["PIN_COMPILER"] ? {
-  "mrbgems/picoruby-mruby/lib/mruby" => "b05a7bfda8ac192ab33f4f192d972c2794d2b170",
-  "mrbgems/mruby-compiler"           => "db0aea5c1773c50244b6ee44f43170e45ad2253e",
-  "mrbgems/mruby-bin-mrbc"           => "fa77fbde4ac20c00a2df2ddb2479e6ba2996f347"
-} : {}).freeze
+# harness は Pico 2 W の heap 対策で compiler を旧 pin に固定するが、本 repo は同じ vendor/picoruby を
+# host test と wasm が使うので pin しない。
+# upstream の pico2_w config が MRC_PRISM_ARENA_BLOCK=2048 を define しているので pin 無しで足りる
+# (mruby-compiler/src/ccontext.c の #ifndef)。
+SUBMODULE_PINS = {}.freeze
 
 # ESP32: vendor 内の build_config (CMake が path を決め打つ) => 本 repo の build_config。
 # harness の vendor:overlay と同じ shim 方式。
@@ -110,9 +102,7 @@ def require_harness!
   raise "vendor/R2P2-dev-harness is not there. Run `rake vendor:setup_all` first."
 end
 
-# rake の exe が PATH に無い環境 (rbenv の shim が効いていない CI、Claude Code の web session)
-# でも通るように ruby 経由で叩く。upstream の rake task は自分の中で裸の `rake` を呼ぶので、
-# 子プロセスの PATH にも rake の exe が居る dir を足す。harness の Rakefile と同じ。
+# 子プロセスの PATH にも rake の exe が要る (upstream の task が裸の rake を呼ぶ)。
 def rake_command
   rake = begin
            Gem.bin_path("rake", "rake")
@@ -136,19 +126,21 @@ def vendor_rake(env, *args)
   rake_in(PICORUBY_SRC, env, *args)
 end
 
-# ESP-IDF を subshell で有効化してから vendor/R2P2-ESP32 の中で実行する。
-def esp_sh(cmd, env = {})
+# ESP-IDF を subshell で有効化してから vendor/R2P2-ESP32 の中で実行する。esp32.rake の esp32:run も
+# (プロセスの生存を自分で見るために) この文字列組み立てだけを使う。
+def esp_shell_command(cmd)
   idf = ENV["IDF_PATH"] || File.expand_path("~/esp/esp-idf")
   export = File.join(idf, "export.sh")
   raise "ESP-IDF not found: #{export} (set IDF_PATH)" unless File.exist?(export)
-  sh env, "bash", "-lc", ". #{export.shellescape} >/dev/null && cd #{ESP32_DIR.shellescape} && #{cmd}"
+  ". #{export.shellescape} >/dev/null && cd #{ESP32_DIR.shellescape} && #{cmd}"
 end
 
-# harness の rakelib のうち、本 repo の tree に対してそのまま動くものだけを load する。
-#   vendor.rake : setup / refresh / clean / vendor:submodules / vendor:overlay
-#   test.rake   : test:host / test:examples (+ build_host_vm 等の helper)
-# rp2040.rake は tools/ と firmware-patches/ を HARNESS_ROOT 直下に期待するので、
-# rakelib/rp2040.rake が vendor:sync_tools の複製を確かめてから load する。
+def esp_sh(cmd, env = {})
+  sh env, "bash", "-lc", esp_shell_command(cmd)
+end
+
+# harness の rakelib のうち vendor.rake と test.rake だけを load する
+# (rp2040.rake は rakelib/rp2040.rake が別途 guard して load する)。
 def load_harness_rakelib!
   return unless harness_ready?
   return if $sendairk03_harness_loaded
@@ -161,6 +153,6 @@ end
 load_harness_rakelib!
 
 desc "板なしで確かめられる全部 (host picotest 両 VM + example / web / server の compile)"
-task test: %w[test:host test:examples test:sources test:host_femto]
+task test: %w[test:host test:examples test:sources test:gem_lists test:host_femto]
 
 task default: [:test]

@@ -1,11 +1,6 @@
 # M5 ATOM Matrix (ESP32-PICO-D4, FemtoRuby) 向け。vendor/R2P2-ESP32 の rake / idf.py を包む。
-#
-#   rake vendor:setup_all        # 取得 (一度だけ)
-#   rake esp32:setup             # ESP-IDF の set-target と host tool build (一度だけ)
-#   rake esp32:run APP=app       # sync → build → flash → monitor (壁時計で切る)
-#
-# ESP-IDF v5.5 を ~/esp/esp-idf (または IDF_PATH) に入れておく。PORT= でシリアルを指定できる。
-# ATOM Matrix は FemtoRuby (mruby/c) のみ上流で確認済み。PICORB_VM=mruby は spike 用。
+# ESP-IDF v5.5 を ~/esp/esp-idf (または IDF_PATH) に。PORT= でシリアル指定。
+# task の使い方は README、板の事実は CLAUDE.md。
 require "open3"
 
 ESP32_BUILD_DIR = File.join(BUILD_DIR, "esp32")
@@ -33,7 +28,13 @@ def with_patches(dir, patches)
   yield
 ensure
   FileUtils.cd(dir) do
-    applied.reverse_each { |patch| sh "git apply --reverse #{patch.shellescape}" }
+    applied.reverse_each do |patch|
+      begin
+        sh "git apply --reverse #{patch.shellescape}"
+      rescue StandardError
+        warn "patch reverse failed: #{patch}"
+      end
+    end
   end
 end
 
@@ -72,9 +73,7 @@ def esp32_monitor_env
 end
 
 namespace :esp32 do
-  # CMake が build_config の path を決め打つ (components/picoruby-esp32/CMakeLists.txt) ので、
-  # harness の vendor:overlay と同じく、その名前の file を「本 repo の build_config を load するだけ」の
-  # shim に置き換える。毎回貼り直す (refresh で HEAD が動いた後に *.upstream.rb が古いままになるのを防ぐ)。
+  # CMake が build_config の path を決め打つので shim に置き換える。毎回貼り直す (refresh 後の *.upstream.rb 陳腐化を防ぐ)。
   desc "Point R2P2-ESP32's build_config at this repo's build_config (generated shims)"
   task :overlay do
     require_esp32!
@@ -160,7 +159,10 @@ namespace :esp32 do
   desc "Flash only the storage partition (examples), a few seconds (env: PORT)"
   task :storage do
     require_esp32!
-    esp_sh("rake flash_storage", esp32_monitor_env)
+    # upstream の flash_storage task (R2P2-ESP32/rakelib/flash.rake) は PORT を無視するので esptool を直接叩く。
+    port_arg = ENV["PORT"] ? "--port #{ENV['PORT'].shellescape}" : ""
+    esp_sh("esptool.py #{port_arg} -b 460800 erase_region 0x210000 0x100000 && " \
+           "esptool.py #{port_arg} -b 460800 write_flash 0x210000 build/storage.bin")
   end
 
   desc "Open the serial monitor (Ctrl-] to quit) (env: PORT)"
@@ -169,7 +171,7 @@ namespace :esp32 do
     esp_sh("rake monitor", esp32_monitor_env)
   end
 
-  desc "sync → build → flash → monitor for N seconds, log under build/esp32/log/ (env: APP, PORT)"
+  desc "sync -> build -> flash -> monitor for N seconds, log under build/esp32/log/ (env: APP, PORT)"
   task :run, [:seconds] do |_t, args|
     seconds = (args[:seconds] || "30").to_i
     Rake::Task["esp32:build"].invoke
@@ -178,21 +180,51 @@ namespace :esp32 do
     FileUtils.mkdir_p log_dir
     log = File.join(log_dir, Time.now.strftime("%Y%m%d-%H%M%S.log"))
     puts "monitoring #{seconds}s -> #{log}"
-    # esp-idf-monitor は対話型。timeout で process group ごと止めて、出力は tee で残す。
-    port = ENV["PORT"] ? "PORT=#{ENV['PORT'].shellescape} " : ""
-    esp_sh("timeout --foreground #{seconds} #{port}rake monitor 2>&1 | tee #{log.shellescape}; true")
-    puts File.exist?(log) ? "log: #{log} (#{File.size(log)} bytes)" : "no log written"
+    # esp-idf-monitor は対話型。macOS に GNU timeout(1) が無いので、pgroup: true で自前で壁時計を切る。
+    bytes_written = 0
+    File.open(log, "w") do |log_io|
+      Open3.popen2e(esp32_monitor_env, "bash", "-lc", esp_shell_command("rake monitor"), pgroup: true) do |stdin, stdout, wait_thr|
+        stdin.close
+        pid = wait_thr.pid
+        reader = Thread.new do
+          begin
+            stdout.each_line do |line|
+              puts line
+              log_io.write(line)
+              bytes_written += line.bytesize
+            end
+          rescue IOError
+          end
+        end
+        sleep seconds
+        begin
+          Process.kill("-TERM", pid)
+        rescue Errno::ESRCH
+        end
+        unless wait_thr.join(2)
+          begin
+            Process.kill("-KILL", pid)
+          rescue Errno::ESRCH
+          end
+          wait_thr.join
+        end
+        reader.join
+      end
+    end
+    raise "esp32:run: monitor produced no output (log: #{log})" if bytes_written.zero?
+    puts "log: #{log} (#{bytes_written} bytes)"
   end
 
-  # upstream の qemu.rake は ESP32-S3 固定。ATOM (xtensa ESP32 classic) の代わりにはならない。
   desc "Boot the firmware on QEMU (ESP32-S3 only; not a stand-in for ATOM Matrix)"
-  task :qemu do
+  task qemu: [:overlay, :sync] do
     require_esp32!
     unless ESP32_TARGET == "esp32s3"
       raise "esp32:qemu only works with IDF_TARGET=esp32s3 (R2P2-ESP32's qemu.rake hardcodes it). " \
             "It does not emulate the ATOM Matrix (xtensa ESP32); use it only as a boot smoke test."
     end
+    vm = ESP32_VM == "mruby" ? "mruby" : "mrubyc"
     esp_sh("rake setup_qemu") unless File.directory?(File.join(ESP32_DIR, "build-qemu"))
+    esp_sh("idf.py -B build-qemu -DPICORB_VM=#{vm} build")
     esp_sh("rake #{ESP32_VM == 'mruby' ? 'picoruby' : 'femtoruby'}:qemu")
   end
 end
