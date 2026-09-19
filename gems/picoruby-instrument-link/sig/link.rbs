@@ -1,0 +1,35 @@
+module Instrument
+  module Link
+    class Error < StandardError
+    end
+    SCHEMES: Hash[String, untyped]
+    type parsed = { scheme: String, host: String, params: Hash[String, String] }
+
+    def self.parse: (String spec) -> parsed
+    def self.register: (String scheme, untyped klass) -> untyped
+    def self.open: (String spec, ?Hash[Symbol, untyped] opts) -> Base
+
+    class Base
+      def initialize: (?String host, ?Hash[String, String] params, ?Hash[Symbol, untyped] opts) -> void
+      def write: (untyped data) -> Integer
+      def puts: (untyped data) -> nil
+      def read_nonblock: (?Integer nbytes) -> String?
+      def available: () -> Integer
+      def available?: () -> bool
+      def connected?: () -> bool
+      def close: () -> untyped
+
+      private
+      def param_int: (String key, Integer default) -> Integer
+      def parse_int: (String s) -> Integer?
+    end
+
+    class Console < Base
+    end
+
+    class Loopback < Base
+      attr_reader written: Array[String]
+      def inject: (untyped data) -> nil
+    end
+  end
+end

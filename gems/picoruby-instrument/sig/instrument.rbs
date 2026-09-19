@@ -1,0 +1,82 @@
+module Instrument
+  SCALES: Hash[Symbol, Array[Integer]]
+
+  class Gate
+    MODES: Array[Symbol]
+    attr_reader mode: Symbol
+    def initialize: (?mode: Symbol) -> void
+    def mode=: (Symbol value) -> Symbol
+    def on?: () -> bool
+    def edge: () -> Symbol?
+    def changed?: () -> bool
+    def update: (untyped pressed) -> bool
+    def release: () -> bool
+  end
+
+  class Smoother
+    attr_reader value: Integer?
+    attr_reader alpha: Integer
+    attr_reader min: Integer?
+    attr_reader max: Integer?
+    def initialize: (?window: Integer, ?alpha: Integer, ?min: Integer?, ?max: Integer?) -> void
+    def in_range?: () -> bool
+    def update: (Integer? raw) -> Integer?
+    def reset: () -> nil
+  end
+
+  class PitchMapper
+    MODES: Array[Symbol]
+    SEMITONE_RATIO_MILLIONS: Array[Integer]
+    A4_MILLIHZ: Integer
+    attr_reader dist_min: Integer
+    attr_reader dist_max: Integer
+    attr_reader note_min: Integer
+    attr_reader note_max: Integer
+    attr_reader mode: Symbol
+    attr_reader scale: Symbol
+    attr_reader transpose: Integer
+    def initialize: (?dist_min: Integer, ?dist_max: Integer, ?note_min: Integer, ?note_max: Integer, ?mode: Symbol, ?scale: Symbol, ?transpose: Integer) -> void
+    def mode=: (Symbol value) -> Symbol
+    def scale=: (Symbol value) -> Symbol
+    def transpose=: (Integer value) -> Integer
+    def in_range?: (Integer? dist_mm) -> bool
+    def note_milli: (Integer dist_mm) -> Integer
+    def freq_milli: (Integer note_milli) -> Integer
+
+    private
+    def snap: (Integer raw_milli) -> Integer
+  end
+
+  class DepthMapper
+    CURVES: Array[Symbol]
+    attr_reader scale: Integer
+    attr_reader curve: Symbol
+    def initialize: (?scale: Integer, ?curve: Symbol) -> void
+    def curve=: (Symbol value) -> Symbol
+    def depth: (Integer ax, ?Integer ay, ?Integer az) -> Integer
+
+    private
+    def isqrt: (Integer n) -> Integer
+  end
+
+  class Runner
+    class Error < StandardError
+    end
+    attr_reader link: untyped
+    attr_reader seq: Integer
+    attr_reader ticks: Integer
+    attr_reader last_frame: String?
+    def initialize: (link: untyped, ?idle_ms: Integer, ?binary: bool) -> void
+    def setup: () { (Runner) -> void } -> void
+    def tick: () { (Runner) -> void } -> void
+    def teardown: () { (Runner) -> void } -> void
+    def before_tick: () { (Runner) -> void } -> void
+    def after_tick: () { (Runner) -> void } -> void
+    def stop: () -> bool
+    def stopped?: () -> bool
+    def emit: (gate: bool | Integer, note_milli: Integer, depth: Integer, ?dist: Integer, ?tilt_x: Integer, ?tilt_y: Integer) -> String
+    def run: () ?{ (Runner) -> void } -> Runner
+    def silence: () -> void
+    def idle: (Integer ms) -> void
+  end
+end

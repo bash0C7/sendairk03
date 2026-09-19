@@ -1,0 +1,44 @@
+module Instrument
+  module Frame
+    BINARY_MAGIC: Integer
+    BINARY_VER: Integer
+    BINARY_SIZE: Integer
+    NOTE_MAX: Integer
+    DEPTH_MAX: Integer
+    DIST_MAX: Integer
+    TILT_MIN: Integer
+    TILT_MAX: Integer
+    SEQ_WRAP: Integer
+
+    type frame = Hash[Symbol, Integer]
+
+    def self.clamp: (Integer v, Integer lo, Integer hi) -> Integer
+    def self.gate_bit: (bool | Integer gate) -> Integer
+    def self.encode: (gate: bool | Integer, note_milli: Integer, depth: Integer, ?dist: Integer, ?tilt_x: Integer, ?tilt_y: Integer, ?seq: Integer) -> String
+    def self.decode: (String? str) -> frame?
+    def self.parse_int: (String? s) -> Integer?
+    def self.encode_binary: (gate: bool | Integer, note_milli: Integer, depth: Integer, ?dist: Integer, ?tilt_x: Integer, ?tilt_y: Integer, ?seq: Integer) -> String
+    def self.decode_binary: (String? str) -> frame?
+    def self.signed8: (Integer b) -> Integer
+    def self.quantize16: (Integer t) -> Integer
+    def self.crc8: (Array[Integer] bytes) -> Integer
+
+    class Reader
+      LT: Integer
+      GT: Integer
+      LF: Integer
+      attr_reader dropped: Integer
+      attr_reader parse_errors: Integer
+      attr_reader mode: Symbol
+      def initialize: (?mode: Symbol, ?max_buffer: Integer) -> void
+      def buffered: () -> Integer
+      def reset: () -> nil
+      def feed: (String? chunk) -> Array[frame]
+
+      private
+      def take_ascii: (Array[frame] frames) -> bool
+      def take_binary: (Array[frame] frames) -> bool
+      def skip_garbage: () -> void
+    end
+  end
+end
