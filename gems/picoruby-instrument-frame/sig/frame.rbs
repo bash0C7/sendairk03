@@ -1,7 +1,5 @@
 module Instrument
   module Frame
-    VERSION: Integer
-    ASCII_HEAD: String
     BINARY_MAGIC: Integer
     BINARY_VER: Integer
     BINARY_SIZE: Integer
@@ -11,7 +9,6 @@ module Instrument
     TILT_MIN: Integer
     TILT_MAX: Integer
     SEQ_WRAP: Integer
-    KEYS: Array[Symbol]
 
     type frame = Hash[Symbol, Integer]
 
@@ -23,6 +20,7 @@ module Instrument
     def self.encode_binary: (gate: bool | Integer, note_milli: Integer, depth: Integer, ?dist: Integer, ?tilt_x: Integer, ?tilt_y: Integer, ?seq: Integer) -> String
     def self.decode_binary: (String? str) -> frame?
     def self.signed8: (Integer b) -> Integer
+    def self.quantize16: (Integer t) -> Integer
     def self.crc8: (Array[Integer] bytes) -> Integer
 
     class Reader

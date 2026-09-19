@@ -35,7 +35,7 @@ module Instrument
 
     private
 
-    # 整数平方根 (Newton 法)。d*1000 <= 1_000_000 なので数回で収束する。
+    # 整数平方根 (Newton 法)。n <= 1_000_000
     def isqrt(n)
       return 0 if n <= 0
       x = n

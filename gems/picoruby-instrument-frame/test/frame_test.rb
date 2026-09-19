@@ -1,6 +1,5 @@
 # Instrument::Frame の encode / decode。docs/wire-protocol.md の実行形。
-# picotest の runner は test file をまず CRuby で load して class を数えるので、
-# top level では gem の定数に触らない (method の中でだけ触る)。
+# top level では gem の定数に触らない (runner が CRuby で先に load する)。
 class InstrumentFrameTest < Picotest::Test
 
   def test_ascii_round_trip
@@ -22,7 +21,7 @@ class InstrumentFrameTest < Picotest::Test
   end
 
   def test_encode_clamps_and_wraps
-    str = Instrument::Frame.encode(gate: 1, note_milli: 999_999, depth: -5, dist: 9000, tilt_x: -9999, tilt_y: 9999, seq: 10_001)
+    str = Instrument::Frame.encode(gate: 1, note_milli: 999_999, depth: -5, dist: 9000, tilt_x: -9999, tilt_y: 9999, seq: 10_241)
     assert_equal "<V1,G:1,N:127000,D:0,M:2000,X:-2000,Y:2000,S:1>\n", str
   end
 
@@ -73,9 +72,25 @@ class InstrumentFrameTest < Picotest::Test
       got = Instrument::Frame.decode_binary(Instrument::Frame.encode_binary(gate: 0, note_milli: 0, depth: d))[:depth]
       assert got >= prev
       assert got <= 1000
+      assert (got - d).abs <= 4
       prev = got
       d += 125
     end
+    # T3: 実際の量子化式から求まる 1 点 (500 -> u8 127 -> 127*1000/255 = 498)
+    assert_equal 498, Instrument::Frame.decode_binary(Instrument::Frame.encode_binary(gate: 0, note_milli: 0, depth: 500))[:depth]
+  end
+
+  def test_binary_note_milli_max_round_trip
+    got = Instrument::Frame.decode_binary(Instrument::Frame.encode_binary(gate: 0, note_milli: 127_000, depth: 0))[:note_milli]
+    assert (got - 127_000).abs <= 10
+  end
+
+  # G12: tilt の binary 量子化は floor ではなく最近傍への丸め (-1 が -16 に張り付かない)
+  def test_binary_tilt_rounds_to_nearest_not_floor
+    minus_one = Instrument::Frame.decode_binary(Instrument::Frame.encode_binary(gate: 0, note_milli: 0, depth: 0, tilt_x: -1))[:tilt_x]
+    plus_one = Instrument::Frame.decode_binary(Instrument::Frame.encode_binary(gate: 0, note_milli: 0, depth: 0, tilt_x: 1))[:tilt_x]
+    assert_equal 0, minus_one
+    assert_equal 0, plus_one
   end
 
   def test_binary_rejects_bad_crc_and_magic

@@ -35,7 +35,8 @@ module Instrument
       if @value.nil?
         @value = med
       else
-        @value = @value + (med - @value) * @alpha / 100
+        delta = (med - @value) * @alpha
+        @value += (delta >= 0 ? delta + 50 : delta - 50) / 100
       end
       @value
     end

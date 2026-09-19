@@ -1,4 +1,5 @@
-# uart://<unit>?baud=115200&tx=<pin>&rx=<pin>   (picoruby-uart が build に居る時だけ)
+# uart://<unit>?baud=921600&tx=<pin>&rx=<pin>   (unit は port の完全名。picoruby-uart が build に居る時だけ)
+# host は ESP32_UART1 / RP2040_UART1 のように port の受け付ける完全名をそのまま渡す (数字だけの短縮形は無い)。
 module Instrument
   module Link
     begin
@@ -6,9 +7,9 @@ module Instrument
       class Uart < Base
         def initialize(host = "", params = {}, opts = {})
           super(host, params, opts)
-          unit = host.length == 0 ? "UART1" : (host =~ /\A\d+\z/ ? "UART#{host}" : host)
+          raise Error, "uart:// needs a unit name, e.g. uart://ESP32_UART1?..." if host.length == 0
           @uart = UART.new(
-            unit: unit,
+            unit: host,
             txd_pin: param_int("tx", -1),
             rxd_pin: param_int("rx", -1),
             baudrate: param_int("baud", 115_200)
@@ -22,7 +23,7 @@ module Instrument
         end
 
         def read_nonblock(nbytes = 256)
-          @uart.read(nbytes)
+          @uart.readpartial(nbytes)
         end
 
         def available

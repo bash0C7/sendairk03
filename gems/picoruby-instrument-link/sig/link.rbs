@@ -7,10 +7,10 @@ module Instrument
 
     def self.parse: (String spec) -> parsed
     def self.register: (String scheme, untyped klass) -> untyped
-    def self.open: (String spec, **untyped opts) -> Base
+    def self.open: (String spec, ?Hash[Symbol, untyped] opts) -> Base
 
     class Base
-      def initialize: (?String host, ?Hash[String, String] params, **untyped opts) -> void
+      def initialize: (?String host, ?Hash[String, String] params, ?Hash[Symbol, untyped] opts) -> void
       def write: (untyped data) -> Integer
       def puts: (untyped data) -> nil
       def read_nonblock: (?Integer nbytes) -> String?
@@ -21,6 +21,7 @@ module Instrument
 
       private
       def param_int: (String key, Integer default) -> Integer
+      def parse_int: (String s) -> Integer?
     end
 
     class Console < Base

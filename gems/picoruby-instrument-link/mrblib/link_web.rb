@@ -45,6 +45,7 @@ module Instrument
       end
       register "webble", WebBle
     rescue NameError
+      # この build に JS::BLE::UART は居ない
     end
 
     begin
@@ -105,6 +106,7 @@ module Instrument
       end
       register "webserial", WebSerial
     rescue NameError
+      # この build に JS::WebSerial は居ない
     end
   end
 end

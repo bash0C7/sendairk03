@@ -68,18 +68,18 @@ module Instrument
 
     # note_milli (MIDI x1000) → 周波数 mHz。
     def freq_milli(note_milli)
-      cents = note_milli - 69_000          # A4 からの差 (millinote = cents / 10 ではなく 1/1000 note)
+      milli = note_milli - 69_000
       octaves = 0
-      while cents < 0
-        cents += 12_000
+      while milli < 0
+        milli += 12_000
         octaves -= 1
       end
-      while cents >= 12_000
-        cents -= 12_000
+      while milli >= 12_000
+        milli -= 12_000
         octaves += 1
       end
-      semi = cents / 1000
-      frac = cents - semi * 1000           # 0..999 (1/1000 semitone)
+      semi = milli / 1000
+      frac = milli - semi * 1000           # 0..999 (1/1000 semitone)
       lo = SEMITONE_RATIO_MILLIONS[semi]
       hi = semi == 11 ? 2_000_000 : SEMITONE_RATIO_MILLIONS[semi + 1]
       ratio = lo + (hi - lo) * frac / 1000 # x1_000_000
@@ -94,7 +94,6 @@ module Instrument
 
     private
 
-    # 最も近い音階の音に吸着させる。
     def snap(raw_milli)
       note = (raw_milli + 500) / 1000
       octave = note / 12
@@ -106,7 +105,7 @@ module Instrument
       size = degrees.size
       while i < size
         deg = degrees[i]
-        # 同じ度数を 1 オクターブ下 / 上でも試す (B と C の跨ぎ)。block iterator を避けて 3 回展開する
+        # 同じ度数を 1 オクターブ下/上でも試す (B と C の跨ぎ)
         k = -1
         while k <= 1
           cand = deg + k * 12

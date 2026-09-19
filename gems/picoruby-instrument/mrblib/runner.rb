@@ -7,10 +7,7 @@
 #   runner.teardown { |i| ... LED 消灯など ... }
 #   runner.run
 #
-# block はこのようにフラットに登録する。`run do |inst| inst.tick { ... } end` の入れ子も mruby では動くが、
-# mruby/c (FemtoRuby = ATOM Matrix) では、外側の block が返った後に呼ばれる内側の block が外側の
-# ローカル変数を掴んでいると VM が assertion で落ちる (escaped closure)。センサーや LED の変数は
-# 登録した場所と同じスコープに置く。
+# block はフラットに登録する (mruby/c の escaped closure: docs/spec.md §7)。
 #
 # Runner が保証すること (= アプリに書かせないこと):
 #   - seq の付番と frame 送出の一元化 (link.write)
@@ -54,7 +51,7 @@ module Instrument
       @stopped
     end
 
-    # frame を 1 つ送る。seq はここで付ける。
+    # seq はここで付ける。
     def emit(gate:, note_milli:, depth:, dist: 0, tilt_x: 0, tilt_y: 0)
       frame = if @binary
                 Frame.encode_binary(gate: gate, note_milli: note_milli, depth: depth, dist: dist,
@@ -70,12 +67,11 @@ module Instrument
       frame
     end
 
-    def run(&block)
-      block.call(self) if block
+    def run
       raise Error, "tick block is required" unless @tick
       @stopped = false
-      @setup&.call(self)
       begin
+        @setup&.call(self)
         until @stopped
           @before_tick&.call(self)
           @tick.call(self)
@@ -84,13 +80,18 @@ module Instrument
           idle(@idle_ms) if @idle_ms > 0
         end
       ensure
-        silence
-        @teardown&.call(self)
+        # link が既に落ちていても teardown は必ず通す
+        begin
+          silence
+        rescue StandardError
+        ensure
+          @teardown&.call(self)
+        end
       end
       self
     end
 
-    # 例外でも stop でも、最後に必ず gate:0 を送る。
+    # 直前が gate:1 の時だけ gate:0 を 1 回送る (二重送出を避ける)
     def silence
       return if @last_gate == 0 || @last_gate.nil?
       emit(gate: 0, note_milli: 0, depth: 0)

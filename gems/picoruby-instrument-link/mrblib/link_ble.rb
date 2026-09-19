@@ -1,7 +1,7 @@
 # ble://<name>   デバイス側の BLE::UART (Nordic UART Service) peripheral。picoruby-ble-uart が居る時だけ。
 #
 # BLE::UART#start はイベントループを所有するので、ここでは start を呼ばない。
-# アプリ側で `link.uart.start { runner_tick }` のように回す (examples/rp2040/ble_instrument.rb)。
+# アプリ側で `link.uart.start { runner_tick }` のように回す (Phase 3 で examples/rp2040/ に足す)。
 module Instrument
   module Link
     begin

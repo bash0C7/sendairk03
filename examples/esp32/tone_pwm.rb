@@ -14,14 +14,18 @@ pwm = PWM.new(33, frequency: 440, duty: 0)
 pitch = Instrument::PitchMapper.new(mode: :snap, scale: :major_pentatonic)
 smoother = Instrument::Smoother.new(min: 20, max: 600)
 
-while true
-  dist = smoother.update(tof.read_distance)
-  if button.read == 0 && dist
-    hz = pitch.freq_milli(pitch.note_milli(dist)) / 1000
-    pwm.frequency(hz)
-    pwm.duty(50)
-    puts "dist=#{dist} hz=#{hz}"
-  else
-    pwm.duty(0)
+begin
+  while true
+    dist = smoother.update(tof.read_distance)
+    if button.read == 0 && dist
+      hz = pitch.freq_milli(pitch.note_milli(dist)) / 1000
+      pwm.frequency(hz)
+      pwm.duty(50)
+      puts "dist=#{dist} hz=#{hz}"
+    else
+      pwm.duty(0)
+    end
   end
+ensure
+  pwm.duty(0)
 end

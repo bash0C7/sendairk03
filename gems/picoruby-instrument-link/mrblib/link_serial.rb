@@ -8,8 +8,8 @@ module Instrument
 
         def initialize(host = "", params = {}, opts = {})
           super(host, params, opts)
-          path = host.length == 0 ? "" : "/#{host}"
-          path = host if host.start_with?("/")
+          raise Error, "serial:// needs a device path" if host.length == 0
+          path = host.start_with?("/") ? host : "/dev/#{host}"
           @port = opts[:port] || SerialPort.open(path, baudrate: param_int("baud", 115_200))
         end
 
@@ -35,6 +35,7 @@ module Instrument
       end
       register "serial", Serial
     rescue NameError
+      # この build に SerialPort は居ない
     end
   end
 end

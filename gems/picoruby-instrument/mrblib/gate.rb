@@ -1,5 +1,5 @@
 # 発音 gate。ボタンの生の論理値を食わせて「今鳴らすか」を返す。
-# picoruby-ot の「鳴りっぱなし」を設計で殺す部品: 音程 / depth と発音を分離する。
+# 音程 / depth と発音を分離する。
 #
 #   gate = Instrument::Gate.new(mode: :momentary)   # :momentary 押している間 / :toggle 押すたび反転 / :latch 一度押したら鳴り続ける
 #   gate.update(pressed)  # => 今 on か

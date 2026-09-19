@@ -1,6 +1,8 @@
 class InstrumentPitchMapperTest < Picotest::Test
-  def mapper(**opts)
-    Instrument::PitchMapper.new(**opts)
+  def mapper(dist_min: 30, dist_max: 570, note_min: 48, note_max: 72,
+             mode: :continuous, scale: :major_pentatonic, transpose: 0)
+    Instrument::PitchMapper.new(dist_min: dist_min, dist_max: dist_max, note_min: note_min, note_max: note_max,
+                                mode: mode, scale: scale, transpose: transpose)
   end
 
   def test_continuous_is_linear_between_the_ends
@@ -24,15 +26,19 @@ class InstrumentPitchMapperTest < Picotest::Test
     # 300mm → 60.0 (C4) はそのまま。61 (C#) は C か D に寄る
     assert_equal 60_000, pm.note_milli(300)
     pm2 = mapper(dist_min: 0, dist_max: 120, note_min: 0, note_max: 120, mode: :snap, scale: :major_pentatonic)
-    assert_equal 60_000, pm2.note_milli(61)   # C# は C(60) と D(62) から同距離。同距離なら低いほう (最初に見つかった最短)
-    assert_equal 62_000, pm2.note_milli(63)   # D# → D(62) と E(64) の同距離、低いほう
+    assert_equal 60_000, pm2.note_milli(61)   # C# は C(60) と D(62) から同距離。同距離なら先に見つかった候補 (scale 配列の順)
+    assert_equal 62_000, pm2.note_milli(63)   # D# → D(62) と E(64) の同距離、先に見つかった D
     assert_equal 64_000, pm2.note_milli(65)   # F は pentatonic に無い → E(64) と G(67) のうち近い E
+
+    # whole_tone: 71 (B) は pc=11。deg 0 の +1 オクターブ (12) が deg 10 より先に見つかる (scale 配列の順)
+    pm3 = mapper(dist_min: 0, dist_max: 120, note_min: 0, note_max: 120, mode: :snap, scale: :whole_tone)
+    assert_equal 72_000, pm3.note_milli(71)
   end
 
   def test_snap_prefers_the_nearest_degree
     pm = mapper(dist_min: 0, dist_max: 120, note_min: 0, note_max: 120, mode: :snap, scale: :major)
     assert_equal 64_000, pm.note_milli(64)    # E は major に居る
-    assert_equal 65_000, pm.note_milli(66)    # F# → F(65) か G(67): 同距離なら低いほう
+    assert_equal 65_000, pm.note_milli(66)    # F# → F(65) か G(67): 同距離なら先に見つかった候補 (scale 配列の順)
     assert_equal 71_000, pm.note_milli(71)    # B
     assert_equal 72_000, pm.note_milli(72)    # C (次のオクターブ)
   end

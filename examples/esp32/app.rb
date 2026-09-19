@@ -1,14 +1,7 @@
-# M5 ATOM Matrix の楽器本体 (FemtoRuby / mruby/c)。起動時に /home/app.rb として自動実行される。
-#
-#   ボタン (GPIO39)         → gate   (押している間だけ鳴る。picoruby-ot の「鳴りっぱなし」を設計で解決)
-#   VL53L0X ToF (I2C)       → 距離   → 音程 (Instrument::PitchMapper、デバイス側で MIDI note に変換)
-#   MPU6886 IMU (I2C)       → 傾き   → depth (FM の深さなど音色側)
-#   WS2812 16 連 (GPIO32)   → 音程 = 色相、gate = 明るさ
-#   USB-UART console        → frame  <V1,G:1,N:60500,D:312,M:250,X:-120,Y:45,S:1234>  を ~40Hz で送る
-#   PWM スピーカー (GPIO33)  → 副の音 (talk section 3「波としての出力」のデモ。USE_PWM=false で止める)
-#
+# M5 ATOM Matrix の楽器本体 (FemtoRuby / mruby/c)。storage/home/app.rb として起動時に自動実行される。
+# ボタン → gate、ToF → 音程、IMU → depth、WS2812 → 色、USB-UART → frame を ~40Hz。
 # 配線は docs/hardware.md、frame は docs/wire-protocol.md。
-# ToF の測定周期 (~25-33ms) がペースメーカー。sleep で速度を落とさない (picoruby-ot の実測から)。
+# ToF の測定周期 (~25-33ms) がペースメーカー。
 require "gpio"
 require "i2c"
 require "pwm"
@@ -26,6 +19,9 @@ LED_COUNT  = 16
 PWM_PIN    = 33
 USE_PWM    = true
 
+# :tick (cooperative, no Task) | :sampler (driver の Task; Phase 1 で実機確認)
+TOF_MODE = :tick
+
 DIST_MIN = 30      # mm
 DIST_MAX = 570     # mm  (30..570 → 2 オクターブ、約 23mm / 半音)
 NOTE_MIN = 48      # C3
@@ -37,8 +33,12 @@ TOF_INTERVAL_MS = 33
 button = GPIO.new(BUTTON_PIN, GPIO::IN | GPIO::PULL_UP)
 i2c = I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: I2C_SDA, scl_pin: I2C_SCL)
 sleep_ms 50
-imu = MPU6886.new(i2c)
-imu.accel_range = MPU6886::ACCEL_RANGE_2G
+begin
+  imu = MPU6886.new(i2c)
+rescue StandardError => e
+  puts "# IMU not ready: #{e.message}"
+  imu = nil
+end
 sleep_ms 50
 tof = VL53L0X.new(i2c)
 sleep_ms 50
@@ -62,18 +62,31 @@ depth = 0
 tilt_x = 0
 tilt_y = 0
 last_emit_ms = 0
+last_tof_value = nil
 
 # ---- run loop (gems/picoruby-instrument の Runner) ----
-# block はフラットに登録する。`run do |inst| inst.tick { ... } end` の入れ子は mruby/c では
-# 外側 block が返った後に内側 block が上のローカル変数 (gate / tof / led ...) を掴めず VM が落ちる。
+# block はフラットに登録する (escaped closure: docs/spec.md §7)
 runner = Instrument::Runner.new(link: link)
 
 runner.setup do
-  tof.start_sampling(interval_ms: TOF_INTERVAL_MS)   # 背景 Task で測り続ける (mruby/c でも動く API)
-  imu.start_sampling(interval_ms: 20)
+  if tof.ready?
+    if TOF_MODE == :sampler
+      tof.start_sampling(interval_ms: TOF_INTERVAL_MS)
+    else
+      tof.configure_sampling(interval_ms: TOF_INTERVAL_MS)
+    end
+  else
+    puts "# ToF not ready (check wiring)"
+  end
+  if imu
+    if TOF_MODE == :sampler
+      imu.start_sampling(interval_ms: 20)
+    else
+      imu.configure_sampling(interval_ms: 20)
+    end
+  end
   led.brightness = 40
   led.clear
-  led.show
   puts "# sendairk03 instrument ready (ToF #{TOF_INTERVAL_MS}ms, frame #{FRAME_MS}ms)"
 end
 
@@ -82,7 +95,7 @@ runner.tick do |i|
 
   # gate: 押している間だけ。edge は即時に frame を送る (ToF の周期を待たない)
   gate.update(button.read == 0)
-  if gate.edge == :rising
+  if gate.edge == :rising && imu
     # 立ち上がった瞬間の姿勢を基準にする (演奏中の傾きだけを depth にする)
     acc = imu.latest_acceleration || imu.acceleration
     base_x = (acc[:x] * 1000).to_i
@@ -90,12 +103,20 @@ runner.tick do |i|
     base_z = (acc[:z] * 1000).to_i
   end
 
-  if tof.fresh?
-    dist = smoother.update(tof.latest_distance) || dist
+  if tof.ready?
+    if TOF_MODE == :tick
+      fresh = tof.tick(now)
+    else
+      current = tof.latest_distance
+      fresh = current != last_tof_value
+      last_tof_value = current
+    end
+    dist = smoother.update(tof.latest_distance) || dist if fresh
   end
+  imu.tick(now) if imu && TOF_MODE == :tick
   note = pitch.note_milli(dist)
 
-  if gate.on?
+  if gate.on? && imu
     acc = imu.latest_acceleration || imu.acceleration
     tilt_x = (acc[:x] * 1000).to_i - base_x
     tilt_y = (acc[:y] * 1000).to_i - base_y
@@ -125,15 +146,16 @@ runner.tick do |i|
     led.show
   end
 
-  sleep_ms 1   # 背景 Task (ToF / IMU sampler) に実行権を渡す
+  sleep_ms 1 if TOF_MODE == :sampler   # 背景 Task (ToF / IMU sampler) に実行権を渡す
 end
 
 runner.teardown do
   pwm.duty(0) if pwm
   led.clear
-  led.show
-  tof.stop_sampling
-  imu.stop_sampling
+  if TOF_MODE == :sampler
+    tof.stop_sampling
+    imu.stop_sampling if imu
+  end
   puts "# instrument stopped"
 end
 

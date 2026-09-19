@@ -1,17 +1,7 @@
-# Instrument::Runner のライフサイクル。link は gem 内の Loopback、idle は待たない subclass で差し替える。
+# Instrument::Runner のライフサイクル。idle は待たない subclass で差し替える。
 #
-# fake の作り方: mruby/c には Class.new が無く、Ruby は method の中に class を書けない。
-# picotest の runner は test file をまず CRuby で load して test class を数えるので、top level で
-# gem の定数に触ると CRuby 側で NameError になる。そこで begin/rescue NameError で囲んで
-# 「gem が居る VM でだけ」fake class を定義する (CRuby の下読みでは黙って飛ばされる)。
-#
-# block の登録はフラットに書く (r.tick { ... } を method の直下で)。mruby/c では
-# `r.run { |inst| inst.tick { log << :x } }` のように入れ子にした内側の block が外側の block より
-# 長生きして外側のローカル変数を掴むと VM が落ちる (docs/spec.md「mruby/c の制約」)。
-begin
-  require "instrument/link"
-rescue LoadError
-end
+# fake の作り方: gem の定数 (Instrument::Runner) は CRuby の下読みでは無いので
+# begin/rescue NameError で囲む。plain な fake (InstrumentRunnerTestLink) はそのままで良い。
 
 begin
   Instrument::Runner
@@ -26,9 +16,30 @@ rescue NameError
   # CRuby の下読み。target VM では定義される
 end
 
+# gem の定数を継承しない plain な fake なので rescue は要らない。
+class InstrumentRunnerTestLink
+  attr_reader :written
+
+  def initialize
+    @written = []
+  end
+
+  def write(data)
+    @written << data
+    data.to_s.bytesize
+  end
+end
+
+# G1: silence (teardown 内の link.write) が例外を投げても teardown は必ず走ることを見るための fake。
+class InstrumentRunnerTestRaisingLink
+  def write(_data)
+    raise RuntimeError, "link down"
+  end
+end
+
 class InstrumentRunnerTest < Picotest::Test
   def build(idle_ms = 0, binary = false)
-    link = Instrument::Link::Loopback.new
+    link = InstrumentRunnerTestLink.new
     InstrumentRunnerTestFake.new(link: link, idle_ms: idle_ms, binary: binary)
   end
 
@@ -94,11 +105,21 @@ class InstrumentRunnerTest < Picotest::Test
     assert_equal 0, Instrument::Frame.decode_binary(frames[1])[:gate]
   end
 
-  # run にブロックを渡す形も動く。ただし内側の block は外側のローカルを掴まない (mruby/c の制約)
-  def test_run_with_a_configuration_block
-    r = build
-    r.run { |inst| inst.tick { |i| i.emit(gate: 1, note_milli: 1000, depth: 0); i.stop } }
-    assert_equal 2, r.link.written.size
-    assert_equal 1, r.ticks
+  # T11a (G1): link が既に落ちていて silence (gate:0 の送出) が例外を投げても、
+  # teardown は必ず呼ばれ、RuntimeError が外へ伝わること。
+  def test_teardown_runs_even_when_link_write_raises
+    link = InstrumentRunnerTestRaisingLink.new
+    r = InstrumentRunnerTestFake.new(link: link, idle_ms: 0, binary: false)
+    teardown_ran = false
+    r.tick { |i| i.emit(gate: 1, note_milli: 1000, depth: 0); raise "sensor died" }
+    r.teardown { teardown_ran = true }
+    raised = nil
+    begin
+      r.run
+    rescue RuntimeError => e
+      raised = e
+    end
+    assert_not_nil raised
+    assert_equal true, teardown_ran
   end
 end

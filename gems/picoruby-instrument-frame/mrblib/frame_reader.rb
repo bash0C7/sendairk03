@@ -10,6 +10,8 @@ module Instrument
       LT = 60      # '<'
       GT = 62      # '>'
       LF = 10      # "\n"
+      CR = 13      # "\r"
+      MAX_ASCII_FRAME = 64
 
       attr_reader :dropped, :parse_errors, :mode
 
@@ -48,7 +50,7 @@ module Instrument
           end
         end
         if @buffer.bytesize > @max_buffer
-          # 閉じない frame が溜まった。古いほうを捨てて先頭を同期し直す
+          # 閉じない frame が max_buffer を超えた。古い側を捨てる (先頭の同期は次の feed の skip_garbage)
           over = @buffer.bytesize - @max_buffer
           @buffer = @buffer.byteslice(over, @max_buffer) || ""
           @dropped += over
@@ -58,13 +60,27 @@ module Instrument
 
       private
 
-      # '<' から '>' まで。'>' がまだ無ければ false (次の feed を待つ)。
+      # '>' がまだ無ければ false (次の feed を待つ)。
       def take_ascii(frames)
         close = find_byte(GT)
-        return false unless close
+        unless close
+          if @buffer.bytesize > MAX_ASCII_FRAME
+            # 閉じない '<' が max buffer 相当まで伸びた。先頭を捨てて次の feed で同期し直す
+            @dropped += 1
+            @buffer = @buffer.byteslice(1, @buffer.bytesize - 1) || ""
+            return true
+          end
+          return false
+        end
         frame = @buffer.byteslice(0, close + 1)
         rest = @buffer.byteslice(close + 1, @buffer.bytesize - close - 1) || ""
-        rest = rest.byteslice(1, rest.bytesize - 1) || "" if rest.getbyte(0) == LF
+        # ESP-IDF の stdout は CRLF。閉じ '>' の直後の \r\n の連なりをまとめて捨てる
+        i = 0
+        size = rest.bytesize
+        while i < size && (rest.getbyte(i) == LF || rest.getbyte(i) == CR)
+          i += 1
+        end
+        rest = rest.byteslice(i, rest.bytesize - i) || "" if i > 0
         @buffer = rest
         decoded = Frame.decode(frame)
         if decoded
@@ -101,7 +117,6 @@ module Instrument
         nil
       end
 
-      # 次の frame 先頭 ('<' か 0xA5) まで捨てる。
       def skip_garbage
         i = 1
         size = @buffer.bytesize

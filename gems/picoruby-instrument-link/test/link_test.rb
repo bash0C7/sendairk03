@@ -67,7 +67,8 @@ class InstrumentLinkTest < Picotest::Test
 
   def test_console_writes_to_stdout
     link = Instrument::Link.open("console://")
-    assert_equal 0, link.write("")
+    assert_equal 2, link.write("ab")
+    assert_nil link.puts("x")
     assert_equal 0, link.available
   end
 

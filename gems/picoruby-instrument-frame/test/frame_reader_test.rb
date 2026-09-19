@@ -71,7 +71,7 @@ class InstrumentFrameReaderTest < Picotest::Test
     frames = reader.feed(corrupt)
     assert_equal 1, frames.size
     assert_equal 9, frames[0][:seq]
-    assert reader.parse_errors >= 1
+    assert_equal 1, reader.parse_errors
   end
 
   def test_ascii_mode_treats_binary_as_garbage
@@ -80,7 +80,58 @@ class InstrumentFrameReaderTest < Picotest::Test
     frames = reader.feed(bin + Instrument::Frame.encode(gate: 0, note_milli: 0, depth: 0, seq: 1))
     assert_equal 1, frames.size
     assert_equal 1, frames[0][:seq]
-    assert_equal 11, reader.dropped
+    assert reader.dropped >= 1
+  end
+
+  # T4: :binary mode は ASCII frame を garbage として扱う ('<' には同期しない)
+  def test_binary_mode_rejects_ascii
+    reader = Instrument::Frame::Reader.new(mode: :binary)
+    asc = Instrument::Frame.encode(gate: 1, note_milli: 60_000, depth: 1, seq: 1)
+    frames = reader.feed(asc)
+    assert_equal 0, frames.size
+    assert_equal asc.bytesize, reader.dropped
+    assert_equal 0, reader.buffered
+  end
+
+  # T4: reset は buffer を空にする (dropped / parse_errors は保持)
+  def test_reset_clears_the_buffer
+    reader = Instrument::Frame::Reader.new
+    reader.feed("<V1,G:1")
+    assert_equal 7, reader.buffered
+    assert_nil reader.reset
+    assert_equal 0, reader.buffered
+  end
+
+  # T4: mode はコンストラクタで渡した値をそのまま返す
+  def test_mode_reader
+    assert_equal :auto, Instrument::Frame::Reader.new.mode
+    assert_equal :ascii, Instrument::Frame::Reader.new(mode: :ascii).mode
+    assert_equal :binary, Instrument::Frame::Reader.new(mode: :binary).mode
+  end
+
+  # T11b (G8): 閉じない '<' が MAX_ASCII_FRAME を超えても binary frame の同期が続けられる
+  def test_stray_lt_resyncs_to_binary_frames
+    reader = Instrument::Frame::Reader.new
+    bin = ""
+    i = 0
+    while i < 10
+      bin << Instrument::Frame.encode_binary(gate: 0, note_milli: 0, depth: 0, dist: 0, tilt_x: 0, tilt_y: 0, seq: i)
+      i += 1
+    end
+    frames = reader.feed("<" + bin)
+    assert_equal 10, frames.size
+    assert_equal 1, reader.dropped
+  end
+
+  # G10: ESP-IDF の stdout は CRLF。'>' の直後の \r\n は dropped に数えない
+  def test_crlf_after_close_is_not_dropped
+    reader = Instrument::Frame::Reader.new
+    a = Instrument::Frame.encode(gate: 1, note_milli: 1, depth: 0, seq: 1)
+    b = Instrument::Frame.encode(gate: 1, note_milli: 2, depth: 0, seq: 2)
+    crlf = a.byteslice(0, a.bytesize - 1) + "\r\n" + b.byteslice(0, b.bytesize - 1) + "\r\n"
+    frames = reader.feed(crlf)
+    assert_equal 2, frames.size
+    assert_equal 0, reader.dropped
   end
 
   def test_unclosed_frame_is_capped

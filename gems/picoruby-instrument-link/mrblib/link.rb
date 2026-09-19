@@ -1,7 +1,7 @@
 # frame の出入り口を 1 つの interface にする。リンクを差し替えてもアプリを書き直さないための層。
 #
 #   link = Instrument::Link.open("console://")                      # ESP32 の USB-UART console (Kernel#puts)
-#   link = Instrument::Link.open("uart://1?baud=921600&tx=32&rx=33") # UART.new(unit: "UART1", ...)
+#   link = Instrument::Link.open("uart://ESP32_UART1?baud=921600&tx=32&rx=33") # UART.new(unit: "ESP32_UART1", ...)
 #   link = Instrument::Link.open("ble://SendaiRK03")                 # BLE::UART peripheral (rp2040)
 #   link = Instrument::Link.open("webserial://?baud=115200")         # ブラウザ Web Serial
 #   link = Instrument::Link.open("webble://SendaiRK03")              # ブラウザ Web Bluetooth (NUS)
@@ -55,8 +55,7 @@ module Instrument
       klass.new(parsed[:host], parsed[:params], opts)
     end
 
-    # 全 transport の共通 interface。IO 風 (write / read_nonblock / available) にしておくと
-    # Frame::Reader と DRb の transport がそのまま乗る。
+    # IO 風にしておくと Frame::Reader と DRb transport がそのまま乗る。
     class Base
       def initialize(host = "", params = {}, opts = {})
         @host = host
@@ -99,12 +98,34 @@ module Instrument
 
       def param_int(key, default)
         v = @params[key]
-        v.nil? || v.length == 0 ? default : v.to_i
+        return default if v.nil? || v.length == 0
+        n = parse_int(v)
+        raise Error, "bad integer for #{key}" if n.nil?
+        n
+      end
+
+      # "-123" / "45" だけを Integer にする (frame gem には依存しない)。
+      def parse_int(s)
+        i = 0
+        neg = false
+        if s.getbyte(0) == 45 # '-'
+          neg = true
+          i = 1
+          return nil if s.length == 1
+        end
+        value = 0
+        len = s.length
+        while i < len
+          b = s.getbyte(i)
+          return nil if b.nil? || b < 48 || b > 57
+          value = value * 10 + (b - 48)
+          i += 1
+        end
+        neg ? -value : value
       end
     end
 
-    # 標準出力に流す。ESP32 の USB-UART console はこれ (picoruby-ot の otmeiwa.rb と同じ経路)。
-    # 受信側は無い (console は shell が握っている)。
+    # ESP32 の USB-UART console はこれ。受信側は無い (console は shell が握っている)。
     class Console < Base
       def write(data)
         str = data.to_s
