@@ -1,5 +1,5 @@
 # 配線チェック用。センサーの生値を 1 行ずつ出すだけ。楽器のロジックは使わない。
-#   rake esp32:run[20] APP=sensor_check
+#   bin/rake 'esp32:run[20]' APP=sensor_check
 require "gpio"
 require "i2c"
 require "mpu6886"

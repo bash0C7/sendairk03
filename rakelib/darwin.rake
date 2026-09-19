@@ -64,7 +64,7 @@ namespace :darwin do
   desc "Run a rake task inside vendor/R2P2-darwin, e.g. rake 'darwin:run[ios:instrument:device:check]'"
   task :run, [:task] do |_t, args|
     require_darwin!
-    raise "usage: rake darwin:run[<task>]" unless args[:task]
+    raise "usage: bin/rake 'darwin:run[<task>]'" unless args[:task]
     rake_in(DARWIN_DIR, {}, args[:task])
   end
 end

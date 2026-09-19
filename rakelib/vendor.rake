@@ -79,7 +79,7 @@ namespace :vendor do
   # harness の rp2040.rake は tools/pico2w/*.rb と firmware-patches/*.patch を HARNESS_ROOT 直下に
   # 期待する。vendor 側にしか実体が無いので複製する。
   # patch は Dir[] が空だと黙って未適用になる (= Machine.usb_boot 無し firmware) ので、
-  # 複製が無いときは rakelib/rp2040.rake が rp2040:* を load せずに落とす。
+  # 複製が無いときは rp2040:check_inputs (rakelib/rp2040.rake) が実行時に落とす。
   desc "Copy the harness's tools/ and firmware-patches/*.patch into this repo (both gitignored)"
   task :sync_tools do
     require_harness!

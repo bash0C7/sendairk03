@@ -22,12 +22,12 @@ Sendai RubyKaigi 03 の 15 分発表「How to craft YOUR handmade PicoRuby Instr
 | 項目 | 決定 | 根拠 |
 |---|---|---|
 | 主役 MCU | ATOM Matrix、**FemtoRuby (mruby/c)** | R2P2-ESP32 の Supported Devices で ATOM は mruby/c のみ確認済 |
-| DRb / Task / ISR 直結 | **Pico 2 W** で展示 | picoruby-drb は mruby VM 限定。mruby/c の `Task` (`Task.create`/`run`/`pass`) はあるが `Task::Queue` と `IRQ.start` (ISR 直結) が無い。picoruby-ble の rp2040 port は上流にある |
+| DRb / Task / ISR 直結 | **Pico 2 W** で展示 | picoruby-drb は mruby VM 限定。mruby/c にも `Task` / `Task::Queue` はあるが、`IRQ.start` (ISR 直結の dispatcher task) は FemtoRuby では NotImplementedError。picoruby-ble の rp2040 port は上流にある |
 | gate | ボタン (GPIO39) = 発音。`Instrument::Gate` (momentary / toggle / latch) | picoruby-ot の always-on drone の教訓 |
 | 音程 | **デバイス側で決める**。frame は MIDI note x1000 を運ぶ | 発表 section 2 の主張。ホストは波を作るだけ |
 | 音程の mode | continuous (portamento) と snap (音階吸着) を切替可能 | picoruby-ot で scale snap が未実装のまま event に臨んだ |
 | 平滑化 | median (window 3) → EMA (alpha 50%) | 20mm 外れ値と追従の両立 |
-| 通信 (本番) | UART (USB CDC) の ASCII frame v1、~40Hz | 人が読める = 画面に出せる。UART で余裕 |
+| 通信 (本番) | UART (USB-UART bridge の console) の ASCII frame v1、~40Hz | 人が読める = 画面に出せる。UART で余裕 |
 | 通信 (無線) | BLE NUS の binary frame v2 (11B、1 notification) | 20B chunk に収める |
 | DRb over BLE | 演奏経路には使わない。`instrument.scale = :minor_pentatonic` の**制御チャネル**として 1 回見せる | 1 RPC が 8 message 以上 = 100ms 超 |
 | Mac の音 | Chrome の Web Serial → picoruby-wasm SPA → WebAudio 1 voice | 自前 Mac + Chrome。最短で音が出る |
@@ -76,12 +76,12 @@ rp2040 は `RP2040_UART0`..`RP2040_UART1`。数値の shorthand は無い)。
 |---|---|
 | `rake vendor:setup_all` / `vendor:refresh_all` | 4 tree の取得 / 更新。harness の `setup` / `refresh` を内包 (`vendor:refresh_rest` は内部 task) |
 | `rake clean` / `setup` / `refresh` | harness 由来の top-level task。`vendor:*` が内部で呼ぶ |
-| `rake test` | `test:host` (mruby) + `test:examples` + `test:sources` + `test:host_femto` (mruby/c)。board 無しはここまで |
+| `rake test` | `test:host` (mruby) + `test:examples` + `test:sources` + `test:gem_lists` + `test:host_femto` (mruby/c)。board 無しはここまで |
 | `rake test:gem_lists` | gems/* が HARNESS_GEMS か TARGET_ONLY_GEMS のどちらかに居ることを検査 (`rake test` に含まれる) |
-| `rake esp32:setup` / `sync` / `build` / `flash` / `storage` / `monitor` / `run[secs]` / `stamp` / `qemu` | ATOM Matrix |
-| `rake rp2040:*` | harness の rp2040.rake をそのまま (tools / patches の複製が揃っている時だけ load) |
+| `rake esp32:setup` / `sync` / `build` / `flash` / `storage` / `monitor` / `'run[secs]'` / `stamp` / `qemu` | ATOM Matrix |
+| `rake rp2040:*` | harness の rp2040.rake をそのまま load。tools/ と firmware-patches/harness-*.patch が無ければ `rp2040:check_inputs` が実行時に落とす |
 | `rake rp2040:check_inputs` | tools/ と firmware-patches/harness-*.patch が揃っているか (rp2040:* の前提) |
-| `rake darwin:setup` / `sync` / `run[task]` | R2P2-darwin へ委譲 |
+| `rake darwin:setup` / `sync` / `'run[task]'` | R2P2-darwin へ委譲 |
 | `rake wasm:build` / `dist` | picoruby-wasm を本 repo の gem 入りで build し web/public/vendor/ へ |
 
 未実装の task は黙って通ったふりをせずに落とす (harness と同じ)。
@@ -108,13 +108,13 @@ rp2040 は `RP2040_UART0`..`RP2040_UART1`。数値の shorthand は無い)。
 
 ## 7. mruby/c (FemtoRuby = ATOM Matrix) の制約 (test:host_femto で踏んだもの)
 
-- `Class.new` 無し → picotest の fake は top level で `begin; <gem の定数>; class Fake < ...; rescue NameError; end` で定義する
-  (CRuby の下読みでは NameError で飛ばされ、target VM では定義される)
+- `Class.new` 無し → picotest の fake は top level の class で書く。gem の定数を継承する時だけ `begin; <gem の定数>; class Fake < ...; rescue NameError; end`
+  で囲む (CRuby の下読みでは NameError で飛ばされ、target VM では定義される)。継承しない plain な fake は rescue 不要
 - `**opts` を受ける method に zsuper (引数無しの `super`) を組み合わせると "wrong number of arguments" → opts は Hash の位置引数
 - 他 gem の mrblib は `require` されるまで見えない → gem 内の依存は明示的に require する
 - `Array#concat` 無し
 - **escaped closure**: 外側 block が返った後に呼ばれる内側 block が外側のローカル変数を掴むと VM assertion で落ちる
-  (`r.run { |inst| inst.tick { log << :x } }` の形)。callback はフラットに登録し、`run` はその同じスコープから呼ぶ
+  (`r.setup { |i| i.tick { log << :x } }` のように登録 block の中で別の callback を登録する形)。callback は変数と同じスコープでフラットに登録し、`run` もそこから呼ぶ
 - **稀な flake**: `test:host_femto` の `InstrumentRunnerTest#test_run_requires_a_tick_block` で、`raise` が
   picotest の `assert_raise` (`rescue Exception`) を素通りして exception 扱いになることがある。同じ生成 script を
   直接 200 回以上回して 2 回だけ (CPU 負荷とは無関係、順序を変えても再現せず)。mruby/c VM 側の非決定性で、
@@ -127,4 +127,6 @@ rp2040 は `RP2040_UART0`..`RP2040_UART1`。数値の shorthand は無い)。
 - upstream の `MRC_PRISM_ARENA_BLOCK=2048` で Pico 2 W が実際に boot するか (compile 時の override は効くことを確認済)。boot しなければ harness と同じ compiler の pin を検討
 - `JS::WebSerial.connect` が async listener からの transient activation を満たすか (Phase 1 最初の検証)
 - Watch の AVAudioSourceNode 常時再生 (Phase 4 spike)
+- ATOM で driver の `start_sampling` (mruby/c の `Task.create` + 実行時 compile) が動くか。app.rb の `TOF_MODE = :sampler` で bench (Phase 1)
+- ATOM Matrix のピン割当 (docs/hardware.md) と USB bridge の製品名 (CLAUDE.md のポート引き) を bench で確認 (Phase 1)
 - ESP32 の BLE: 上流未 merge (picoruby#427 / R2P2-ESP32#135)。ATOM は FemtoRuby なので frame push のみ、Phase 3 の後の stretch

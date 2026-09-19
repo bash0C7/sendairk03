@@ -44,9 +44,9 @@ vendor が無い session では最初に `rake vendor:setup_all` を回す (vend
 ## 板の事実 (間違えやすい)
 
 - **ATOM Matrix (ESP32-PICO-D4) は FemtoRuby (mruby/c)。** PicoRuby (mruby) VM は上流未確認 (Phase 0 の spike のみ)。
-  mruby/c 自身の `Task` (`Task.create` / `run` / `pass`) はある。ATOM に無いのは mruby-task の `Task::Queue` /
-  `IRQ.start` (ISR 直結の event bridge) と `picoruby-drb`。gate は `IRQ.process` の polling か GPIO の read。
-  DRb と `Task::Queue` を使う展示は Pico 2 W (rp2040) の仕事
+  mruby/c にも `Task` (`Task.create` / `run` / `pass`) と `Task::Queue` はある。ATOM に無いのは `IRQ.start`
+  (ISR 直結の dispatcher task。FemtoRuby では NotImplementedError) と `picoruby-drb`。gate は `IRQ.process` の polling か GPIO の read。
+  DRb と `IRQ.start` を使う展示は Pico 2 W (rp2040) の仕事
 - ESP32 はシリアルポートを開くとリセットされる (Web Serial の open でも)。ポートは glob でなく製品名から引く
 - ESP32 の QEMU は ESP32-S3 のみ。ATOM (xtensa ESP32 classic) の代わりにはならない
 - Web Serial / Web Bluetooth は Chrome 系のみ。`http://localhost` は secure context なので HTTPS は要らない
@@ -73,7 +73,7 @@ vendor が無い session では最初に `rake vendor:setup_all` を回す (vend
   Float に頼らず整数演算。library code は while ループ (vendor/picoruby/AGENTS.md。test では検出できないので review で見る)。VM 側の subset 逸脱は `rake test:host_femto` が落とす
 - **mruby/c の escaped closure**: 外側の block が返った後に呼ばれる内側の block が外側のローカル変数を掴んでいると
   VM が `mrbc_find_class_by_object: Invalid value type` で落ちる。callback の登録 (`runner.tick { }` /
-  `button.irq { }`) は変数と同じスコープでフラットに書き、`run do |inst| inst.tick { ... } end` の入れ子にしない。
+  `button.irq { }`) は変数と同じスコープでフラットに書き、登録 block の中で別の callback を登録しない (`r.setup { |i| i.tick { ... } }` の形)。
   状態を渡すなら ivar か `capture:` 引数 (picoruby-irq の流儀)
 - picotest の fake class は test file の **top level** で
   `begin; <gem の定数>; class Fake < …; rescue NameError; end` と書く。mruby/c に `Class.new` は無く、

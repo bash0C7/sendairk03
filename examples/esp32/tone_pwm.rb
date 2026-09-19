@@ -1,5 +1,5 @@
 # talk section 3「波としての出力」の最小形: 距離で PWM の周波数を変えるだけ (音程の計算も gem を使う)。
-#   rake esp32:run[30] APP=tone_pwm
+#   bin/rake 'esp32:run[30]' APP=tone_pwm
 require "gpio"
 require "i2c"
 require "pwm"

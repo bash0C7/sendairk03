@@ -22,7 +22,7 @@
 
 - `<` で始まり `>` で終わる。改行は任意。field は `KEY:INT` を `,` で区切る。先頭 field は version `V1`
 - KEY: `G`=gate `N`=note_milli `D`=depth `M`=dist `X`/`Y`=tilt `S`=seq。未知の KEY は無視 (前方に field を足せる)
-- 全 field を出して 47 byte (改行込み 48)。40Hz で 1.9 kB/s。115200 baud (11.5 kB/s) で余裕、921600 なら送出 0.5ms
+- 可変長: 例の frame で 47 byte (改行込み 48)、値が最大のとき 55 byte (改行込み 56)。40Hz で 1.3–2.2 kB/s。115200 baud (11.5 kB/s) で余裕、921600 なら送出 0.5ms
 - version が違う frame は捨てる (`parse_errors` に数える)
 
 ## v2 binary (BLE NUS / 1 notification = 20B に収める) — 11 byte

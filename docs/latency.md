@@ -16,7 +16,7 @@
 | (BLE NUS notify) | 7.5–30ms | 接続間隔依存 |
 | ブラウザ受信 + parse | 0.7ms avg / 1.4ms p95 | picoruby-ot 実測 |
 | WebAudio 反映 | 3–10ms | `latencyHint: 'interactive'` |
-| 合計 UART / BLE | 28–53ms / 28–79ms | 行の単純和。目標 (40 / 60ms) は最良ケースでしか満たさない |
+| 合計 UART / BLE | 28–54ms / 31–79ms | 行の単純和 (UART 行は例の 48B frame での値)。目標 (40 / 60ms) は最良ケースでしか満たさない |
 
 ## 測り方
 

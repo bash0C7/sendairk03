@@ -9,9 +9,9 @@ end
 
 class InstrumentLinkTest < Picotest::Test
   def test_parse_scheme_host_and_params
-    p = Instrument::Link.parse("uart://1?baud=921600&tx=32&rx=33")
+    p = Instrument::Link.parse("uart://ESP32_UART1?baud=921600&tx=32&rx=33")
     assert_equal "uart", p[:scheme]
-    assert_equal "1", p[:host]
+    assert_equal "ESP32_UART1", p[:host]
     assert_equal "921600", p[:params]["baud"]
     assert_equal "33", p[:params]["rx"]
   end

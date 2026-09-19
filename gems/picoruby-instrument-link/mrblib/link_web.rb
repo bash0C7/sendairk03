@@ -60,7 +60,8 @@ module Instrument
           @rx = ""
         end
 
-        # クリックハンドラ (async listener) の中から呼ぶ。JS::WebSerial.connect は requestPort → open まで行い
+        # クリックハンドラ (async listener) の中から呼ぶ (transient activation を満たすかは未検証: docs/spec.md §8)。
+        # JS::WebSerial.connect は requestPort → open まで行い
         # port を返す。受信は on_receive のブロックに chunk (binary String) で届く。ブロックが無ければ
         # 内部 buffer に溜めて read_nonblock で取り出す。
         def connect(&on_receive)
