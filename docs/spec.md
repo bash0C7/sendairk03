@@ -119,14 +119,18 @@ rp2040 は `RP2040_UART0`..`RP2040_UART1`。数値の shorthand は無い)。
   picotest の `assert_raise` (`rescue Exception`) を素通りして exception 扱いになることがある。同じ生成 script を
   直接 200 回以上回して 2 回だけ (CPU 負荷とは無関係、順序を変えても再現せず)。mruby/c VM 側の非決定性で、
   test を変えても消えない。落ちたら `SKIP_BUILD=1 bin/rake test:host_femto` を 1 回だけ再実行して判断する。
-  再現手順: `RUBY=vendor/picoruby/build-femto/host/bin/femtoruby $RUBY build/test-femto/InstrumentRunnerTest.rb` を繰り返す
+  再現手順: `RUBY=vendor/picoruby/build-femto/host/bin/femtoruby $RUBY build/test-femto/InstrumentRunnerTest.rb` を繰り返す。
+  原因の追跡は issue #1
 
 ## 8. 未決
 
-- ATOM Matrix で PicoRuby (mruby) VM が boot するか (0b)。boot すれば DRb を ATOM でも狙う
-- upstream の `MRC_PRISM_ARENA_BLOCK=2048` で Pico 2 W が実際に boot するか (compile 時の override は効くことを確認済)。boot しなければ harness と同じ compiler の pin を検討
-- `JS::WebSerial.connect` が async listener からの transient activation を満たすか (Phase 1 最初の検証)
-- Watch の AVAudioSourceNode 常時再生 (Phase 4 spike)
-- ATOM で driver の `start_sampling` (mruby/c の `Task.create` + 実行時 compile) が動くか。app.rb の `TOF_MODE = :sampler` で bench (Phase 1)
-- ATOM Matrix のピン割当 (docs/hardware.md) と USB bridge の製品名 (CLAUDE.md のポート引き) を bench で確認 (Phase 1)
-- ESP32 の BLE: 上流未 merge (picoruby#427 / R2P2-ESP32#135)。ATOM は FemtoRuby なので frame push のみ、Phase 3 の後の stretch
+各項目は GitHub issue で追跡する (再現テストから始められる手順は issue 側に書く)。Phase 1〜5 の作業そのものは #4 / #8 / #9 / #10 / #11 / #12、
+macOS での rake 通しは #6、harness への上流還元は #2。
+
+- ATOM Matrix で PicoRuby (mruby) VM が boot するか (0b)。boot すれば DRb を ATOM でも狙う → #3
+- upstream の `MRC_PRISM_ARENA_BLOCK=2048` で Pico 2 W が実際に boot するか (compile 時の override は効くことを確認済)。boot しなければ harness と同じ compiler の pin を検討 → #7
+- `JS::WebSerial.connect` が async listener からの transient activation を満たすか (Phase 1 最初の検証) → #8
+- Watch の AVAudioSourceNode 常時再生 (Phase 4 spike) → #11
+- ATOM で driver の `start_sampling` (mruby/c の `Task.create` + 実行時 compile) が動くか。app.rb の `TOF_MODE = :sampler` で bench (Phase 1) → #5
+- ATOM Matrix のピン割当 (docs/hardware.md) と USB bridge の製品名 (CLAUDE.md のポート引き) を bench で確認 (Phase 1) → #4
+- ESP32 の BLE: 上流未 merge (picoruby#427 / R2P2-ESP32#135)。ATOM は FemtoRuby なので frame push のみ、Phase 3 の後の stretch → #13
